@@ -86,24 +86,24 @@ button:disabled {
   display: flex;
   height: 96px;
   align-items: center;
-  gap: 13px;
-  padding: 0 22px 0 24px;
+  gap: 14px;
+  padding: 0 20px 0 24px;
 }
 
 .brand-logo {
   display: flex;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 13px;
   background: #17201c;
   color: #ffffff;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  box-shadow: 0 10px 24px rgba(23, 32, 28, 0.14);
+  box-shadow: 0 12px 26px rgba(23, 32, 28, 0.16);
 }
 
 .brand-text {
@@ -117,14 +117,14 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
-  line-height: 20px;
+  line-height: 21px;
   letter-spacing: -0.01em;
 }
 
 .brand-subtitle {
-  margin-top: 5px;
+  margin-top: 7px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -135,7 +135,7 @@ button:disabled {
 }
 
 .brand-studio {
-  margin-top: 3px;
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -159,11 +159,16 @@ button:disabled {
 
 .sidebar-section-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: 24px minmax(0, 1fr) 28px;
   align-items: center;
   height: 32px;
   padding: 0 12px;
   column-gap: 8px;
+}
+
+.sidebar-section-spacer {
+  width: 24px;
+  height: 24px;
 }
 
 .sidebar-section-title {
@@ -292,6 +297,39 @@ button:disabled {
   opacity: 0;
 }
 
+.sidebar-row-action {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #a8a29e;
+  opacity: 0;
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.sidebar-row-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+.group:hover > .sidebar-row-action,
+.sidebar-row-action:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-row-action:hover {
+  background: #fff1ee;
+  color: #a24f43;
+}
+
 .sidebar-row.is-active .sidebar-row-count {
   color: #5f7f69;
 }
@@ -319,6 +357,15 @@ button:disabled {
 
 .dark .sidebar-row.is-active .sidebar-row-count {
   color: #afc7b6;
+}
+
+.dark .sidebar-row-action {
+  color: #737373;
+}
+
+.dark .sidebar-row-action:hover {
+  background: rgba(127, 29, 29, 0.3);
+  color: #d9a19a;
 }
 
 .card-image-overlay {

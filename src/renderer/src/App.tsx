@@ -629,7 +629,7 @@ export default function App(): JSX.Element {
                     />
                   )}
                   <button
-                    className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-stone-400 opacity-0 transition hover:bg-red-50 hover:text-red-700 group-hover:opacity-100 dark:text-neutral-500 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                    className="sidebar-row-action"
                     onClick={() => setConfirmState({ type: 'collection', id: collection.id, name: collection.name })}
                     aria-label={`删除图集 ${collection.name}`}
                   >
@@ -750,6 +750,7 @@ function BrandHeader(): JSX.Element {
 function SidebarSectionHeader({ title, onAction }: { title: string; onAction: () => void }): JSX.Element {
   return (
     <div className="sidebar-section-header mb-2">
+      <span className="sidebar-section-spacer" aria-hidden="true" />
       <span className="sidebar-section-title">{title}</span>
       <button className="sidebar-section-add" onClick={onAction} aria-label="新建图集" title="新建图集">
         <Plus className="h-4 w-4" />
