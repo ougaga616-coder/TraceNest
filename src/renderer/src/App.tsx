@@ -341,7 +341,7 @@ export default function App(): JSX.Element {
     () => ({
       all: data.cases.length,
       pending: data.cases.filter((item) => item.status === 'pending').length,
-      favorites: data.cases.filter((item) => item.status === 'confirmed' && item.favorite).length
+      favorites: data.cases.filter((item) => item.favorite).length
     }),
     [data.cases]
   );
@@ -351,7 +351,7 @@ export default function App(): JSX.Element {
     if (search.trim()) return searched;
     if (activeView === 'all') return searched;
     if (activeView === 'pending') return searched.filter((item) => item.status === 'pending');
-    if (activeView === 'favorites') return searched.filter((item) => item.status === 'confirmed' && item.favorite);
+    if (activeView === 'favorites') return searched.filter((item) => item.favorite);
     const collectionId = activeView.replace('collection:', '');
     return searched.filter((item) => item.collectionId === collectionId && item.status === 'confirmed');
   }, [activeView, data.cases, search]);
@@ -680,8 +680,15 @@ export default function App(): JSX.Element {
   function toggleFavorite(id: string): void {
     const item = data.cases.find((work) => work.id === id);
     if (!item) return;
-    updateCase(id, { favorite: !item.favorite });
-    setToast(item.favorite ? '已取消收藏' : '已收藏');
+    setData((current) => {
+      const nextData = {
+        ...current,
+        cases: current.cases.map((work) => (work.id === id ? { ...work, favorite: !item.favorite, updatedAt: nowIso() } : work))
+      };
+      void picflowApi.saveData(nextData);
+      return nextData;
+    });
+    setToast(item.favorite ? '\u5df2\u53d6\u6d88\u6536\u85cf' : '\u5df2\u6536\u85cf');
   }
 
   function addCollection(): void {
