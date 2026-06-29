@@ -85,6 +85,7 @@ export type PicFlowLibraryResult = {
   ok: boolean;
   message: string;
   state?: PicFlowLibraryState;
+  backupPath?: string;
 };
 
 export type PicFlowLibrarySummary = {
@@ -109,6 +110,7 @@ export type PicFlowLibraryApi = {
   addLibrary: () => Promise<PicFlowLibraryResult>;
   openLibraryLocation: () => Promise<PicFlowLibraryResult>;
   switchLibrary: (path: string) => Promise<PicFlowLibraryResult>;
+  resetTestData: () => Promise<PicFlowLibraryResult>;
 };
 
 declare global {

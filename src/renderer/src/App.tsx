@@ -30,6 +30,7 @@ type ConfirmState =
   | { type: 'collection'; id: string; name: string }
   | { type: 'clear-guides'; caseId: string; title: string }
   | { type: 'replace-main'; caseId: string; images: PicFlowImage[] }
+  | { type: 'reset-test-data' }
   | null;
 
 const emptyData: PicFlowData = { version: 1, cases: [], collections: [], settings: { theme: 'light', cardScale: 1.12 } };
@@ -84,7 +85,8 @@ const fallbackPicflowLibrary: PicFlowLibraryApi = {
   createLibrary: async () => ({ ok: false, message: '创建资源库功能开发中' }),
   addLibrary: async () => ({ ok: false, message: '添加资源库功能开发中' }),
   openLibraryLocation: async () => ({ ok: false, message: '暂未找到资源库位置' }),
-  switchLibrary: async () => ({ ok: false, message: '资源库不存在或无效' })
+  switchLibrary: async () => ({ ok: false, message: '资源库不存在或无效' }),
+  resetTestData: async () => ({ ok: false, message: '桌面应用中可重置测试数据' })
 };
 
 const picflowLibrary = window.picflowLibrary ?? fallbackPicflowLibrary;
@@ -560,7 +562,7 @@ export default function App(): JSX.Element {
     setEditingCollectionName('');
   }
 
-  function deleteConfirmed(): void {
+  async function deleteConfirmed(): Promise<void> {
     if (!confirmState) return;
     if (confirmState.type === 'case') {
       const nextData = { ...data, cases: data.cases.filter((item) => item.id !== confirmState.id) };
@@ -587,6 +589,15 @@ export default function App(): JSX.Element {
     if (confirmState.type === 'replace-main') {
       addMainImagesToCase(confirmState.caseId, confirmState.images);
       setToast('已更新主图');
+    }
+    if (confirmState.type === 'reset-test-data') {
+      const result = await picflowLibrary.resetTestData();
+      setToast(result.backupPath ? `${result.message}，备份已保存` : result.message);
+      if (result.state) setLibraryState(result.state);
+      if (result.ok) {
+        setData(emptyData);
+        setSelectedId(null);
+      }
     }
     setConfirmState(null);
   }
@@ -893,6 +904,16 @@ export default function App(): JSX.Element {
           </button>
           <button type="button" className="library-menu-item" onClick={() => void runLibraryAction('open')}>
             打开资源库位置
+          </button>
+          <button
+            type="button"
+            className="library-menu-item is-danger"
+            onClick={() => {
+              setLibraryMenuOpen(false);
+              setConfirmState({ type: 'reset-test-data' });
+            }}
+          >
+            重置测试数据（开发用）
           </button>
         </div>
       )}
@@ -1438,18 +1459,31 @@ function IconButton({
   );
 }
 
-function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<ConfirmState>; onCancel: () => void; onConfirm: () => void }): JSX.Element {
+function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<ConfirmState>; onCancel: () => void; onConfirm: () => void | Promise<void> }): JSX.Element {
   const isCollection = state.type === 'collection';
   const isClearGuides = state.type === 'clear-guides';
   const isReplaceMain = state.type === 'replace-main';
-  const title = isReplaceMain ? '确认替换主图？' : isClearGuides ? '确认清空垫图？' : isCollection ? '确认删除图集？' : '确认删除作品？';
-  const description = isReplaceMain
-    ? '当前作品已有主图。确认后将使用拖入的图片作为新的主图。'
-    : isClearGuides
-      ? '将移除当前作品的全部垫图，此操作无法撤销。'
-      : isCollection
-        ? '只会删除图集本身，不会删除其中的作品。图集内作品将回到未分类。'
-        : '删除后该作品将从本地作品库中移除，此操作无法撤销。';
+  const isResetTestData = state.type === 'reset-test-data';
+  const title = isResetTestData
+    ? '确认重置测试数据？'
+    : isReplaceMain
+      ? '确认替换主图？'
+      : isClearGuides
+        ? '确认清空垫图？'
+        : isCollection
+          ? '确认删除图集？'
+          : '确认删除作品？';
+  const description = isResetTestData
+    ? '这会清空当前 PicFlow 的本地测试数据，并让应用下次启动时重新进入资源库初始化流程。此操作仅用于开发测试。'
+    : isReplaceMain
+      ? '当前作品已有主图。确认后将使用拖入的图片作为新的主图。'
+      : isClearGuides
+        ? '将移除当前作品的全部垫图，此操作无法撤销。'
+        : isCollection
+          ? '只会删除图集本身，不会删除其中的作品。图集内作品将回到未分类。'
+          : '删除后该作品将从本地作品库中移除，此操作无法撤销。';
+  const actionLabel = isReplaceMain ? '替换' : isResetTestData ? '重置' : isClearGuides ? '清空' : '删除';
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
@@ -1464,9 +1498,9 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button className="tool-button" onClick={onCancel}>取消</button>
-          <button className="danger-button" onClick={onConfirm}>
+          <button className="danger-button" onClick={() => void onConfirm()}>
             {!isReplaceMain && <Trash2 className="h-4 w-4" />}
-            {isReplaceMain ? '替换' : isClearGuides ? '清空' : '删除'}
+            {actionLabel}
           </button>
         </div>
       </div>

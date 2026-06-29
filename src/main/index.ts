@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
-import { existsSync, mkdirSync, readFileSync, copyFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -60,6 +60,7 @@ type PicFlowLibraryActionResult = {
   ok: boolean;
   message: string;
   state?: PicFlowLibraryState;
+  backupPath?: string;
 };
 
 type PicFlowLibraryManifest = {
@@ -111,6 +112,16 @@ function appConfigPath(): string {
 
 function defaultLibraryPath(): string {
   return join(app.getPath('userData'), 'PicFlow Library');
+}
+
+function timestampForPath(): string {
+  const date = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function runtimeBackupRoot(): string {
+  return join(dirname(app.getPath('userData')), `PicFlow-backup-${timestampForPath()}`);
 }
 
 function manifestPath(root: string): string {
@@ -425,6 +436,42 @@ async function openLibraryLocation(): Promise<PicFlowLibraryActionResult> {
   return { ok: true, message: '已打开资源库位置', state: getLibraryState() };
 }
 
+function backupAndResetTestData(): PicFlowLibraryActionResult {
+  const backupRoot = runtimeBackupRoot();
+  try {
+    mkdirSync(backupRoot, { recursive: true });
+    const userDataPath = app.getPath('userData');
+    if (existsSync(userDataPath)) {
+      cpSync(userDataPath, join(backupRoot, 'userData'), { recursive: true, force: true });
+    }
+    if (existsSync(dataDir())) {
+      cpSync(dataDir(), join(backupRoot, 'legacy-local-data'), { recursive: true, force: true });
+    }
+  } catch {
+    return { ok: false, message: '测试数据备份失败，已取消重置' };
+  }
+
+  try {
+    const userDataPath = app.getPath('userData');
+    const pathsToRemove = [
+      appConfigPath(),
+      defaultLibraryPath(),
+      join(userDataPath, 'Local Storage'),
+      join(userDataPath, 'Session Storage'),
+      join(userDataPath, 'IndexedDB'),
+      dataDir()
+    ];
+
+    for (const targetPath of pathsToRemove) {
+      if (existsSync(targetPath)) rmSync(targetPath, { recursive: true, force: true });
+    }
+
+    return { ok: true, message: '测试数据已重置，请重启应用', backupPath: backupRoot, state: getLibraryState() };
+  } catch {
+    return { ok: false, message: '测试数据重置失败', backupPath: backupRoot, state: getLibraryState() };
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -488,6 +535,7 @@ app.whenReady().then(() => {
   ipcMain.handle('library:add', () => addLibraryShell());
   ipcMain.handle('library:open-location', () => openLibraryLocation());
   ipcMain.handle('library:switch', (_event, root: string) => switchLibrary(root));
+  ipcMain.handle('library:reset-test-data', () => backupAndResetTestData());
   ipcMain.handle('window:minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

@@ -311,6 +311,14 @@ select,
   background: #edf3ee;
 }
 
+.library-menu-item.is-danger {
+  color: #9d5147;
+}
+
+.library-menu-item.is-danger:hover {
+  background: #f7e8e5;
+}
+
 .dark .library-menu {
   border-color: #494949;
   background: rgba(48, 48, 48, 0.97);
@@ -332,6 +340,14 @@ select,
 
 .dark .library-menu-item:hover {
   background: rgba(175, 199, 182, 0.12);
+}
+
+.dark .library-menu-item.is-danger {
+  color: #d9a19a;
+}
+
+.dark .library-menu-item.is-danger:hover {
+  background: rgba(176, 73, 61, 0.18);
 }
 
 .library-gate {

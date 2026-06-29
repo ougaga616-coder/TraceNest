@@ -25,5 +25,6 @@ contextBridge.exposeInMainWorld('picflowLibrary', {
   createLibrary: () => ipcRenderer.invoke('library:create'),
   addLibrary: () => ipcRenderer.invoke('library:add'),
   openLibraryLocation: () => ipcRenderer.invoke('library:open-location'),
-  switchLibrary: (path: string) => ipcRenderer.invoke('library:switch', path)
+  switchLibrary: (path: string) => ipcRenderer.invoke('library:switch', path),
+  resetTestData: () => ipcRenderer.invoke('library:reset-test-data')
 });
