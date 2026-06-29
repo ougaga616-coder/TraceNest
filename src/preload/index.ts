@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('picflow', {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   importImagePaths: (filePaths: string[], target?: 'asset' | 'reference') => ipcRenderer.invoke('picflow:import-image-paths', filePaths, target),
   saveDataUrlImage: (dataUrl: string, name?: string, target?: 'asset' | 'reference') => ipcRenderer.invoke('picflow:save-data-url-image', dataUrl, name, target),
+  saveUrlImage: (url: string) => ipcRenderer.invoke('picflow:save-url-image', url),
   copyImage: (image: unknown) => ipcRenderer.invoke('picflow:copy-image', image),
   openExternal: (url: string) => ipcRenderer.invoke('picflow:open-external', url)
 });

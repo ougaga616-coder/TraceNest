@@ -60,6 +60,13 @@ const picflowApi = window.picflow ?? {
     type: 'screenshot' as const,
     addedAt: nowIso()
   }),
+  saveUrlImage: async (url: string) => ({
+    id: newId(),
+    url,
+    name: 'image-url',
+    type: 'cover' as const,
+    addedAt: nowIso()
+  }),
   copyImage: async (image: PicFlowImage) => {
     const src = image.url ?? (image.localPath ? `file:///${image.localPath.replace(/\\/g, '/')}` : '');
     if (!src || !navigator.clipboard || !('ClipboardItem' in window)) return false;
@@ -283,18 +290,25 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     const onPaste = async (event: globalThis.ClipboardEvent) => {
+      if (isTextEditingTarget(event.target)) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-guide-dropzone="true"]')) return;
       const imageFile = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith('image/'));
       if (!imageFile) return;
-      const dataUrl = await fileToDataUrl(imageFile);
-      const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'clipboard-image.png');
-      appendWork(createCase({ images: [image], captureMethod: 'clipboard-paste' }));
-      setToast('已创建未命名作品');
+      if (!ensureLibraryReady()) return;
+      event.preventDefault();
+      try {
+        const dataUrl = await fileToDataUrl(imageFile);
+        const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'clipboard-image.png');
+        appendWork(createCase({ images: [image], captureMethod: 'clipboard-paste' }));
+        setToast('\u5df2\u4ece\u526a\u8d34\u677f\u5bfc\u5165\u56fe\u7247');
+      } catch {
+        setToast('\u56fe\u7247\u4fdd\u5b58\u5931\u8d25');
+      }
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, []);
+  }, [libraryState.ready]);
 
   const selectedCase = data.cases.find((item) => item.id === selectedId) ?? null;
 
@@ -357,6 +371,21 @@ export default function App(): JSX.Element {
       return true;
     });
   }, [libraryState.currentLibrary?.path, libraryState.recentLibraries]);
+
+  function isTextEditingTarget(target: EventTarget | null): boolean {
+    const element = target as HTMLElement | null;
+    return Boolean(
+      element?.matches('input, textarea, select') ||
+        element?.closest('[contenteditable="true"]') ||
+        element?.closest('[role="dialog"]')
+    );
+  }
+
+  function ensureLibraryReady(): boolean {
+    if (libraryState.ready) return true;
+    setToast('请先设置资源库');
+    return false;
+  }
 
   async function loadCurrentLibraryDataAndApply(
     reason: 'startup' | 'switch' | 'refresh',
@@ -435,30 +464,53 @@ export default function App(): JSX.Element {
   }
 
   function appendWork(item: PicFlowCase): void {
-    setData((current) => ({ ...current, cases: [item, ...current.cases] }));
+    setData((current) => {
+      const nextData = { ...current, cases: [item, ...current.cases] };
+      void picflowApi.saveData(nextData);
+      return nextData;
+    });
     setSelectedId(item.id);
     setActiveView(item.status === 'pending' ? 'pending' : 'all');
   }
 
+  function appendWorks(items: PicFlowCase[]): void {
+    if (!items.length) return;
+    setData((current) => {
+      const nextData = { ...current, cases: [...items, ...current.cases] };
+      void picflowApi.saveData(nextData);
+      return nextData;
+    });
+    setSelectedId(items[0].id);
+    setActiveView(items[0].status === 'pending' ? 'pending' : 'all');
+  }
+
   function addMainImagesToCase(caseId: string, images: PicFlowImage[]): void {
-    setData((current) => ({
-      ...current,
-      cases: current.cases.map((item) => {
+    setData((current) => {
+      const nextData = {
+        ...current,
+        cases: current.cases.map((item) => {
         if (item.id !== caseId) return item;
         const nextImages = [...images, ...item.images];
         return { ...item, images: nextImages, coverImageId: images[0]?.id ?? item.coverImageId, updatedAt: nowIso() };
-      })
-    }));
+        })
+      };
+      void picflowApi.saveData(nextData);
+      return nextData;
+    });
   }
 
   function addGuideImagesToCase(caseId: string, images: PicFlowImage[]): void {
-    setData((current) => ({
-      ...current,
-      cases: current.cases.map((item) => {
+    setData((current) => {
+      const nextData = {
+        ...current,
+        cases: current.cases.map((item) => {
         if (item.id !== caseId) return item;
         return { ...item, referenceImages: [...(item.referenceImages ?? []), ...images], updatedAt: nowIso() };
-      })
-    }));
+        })
+      };
+      void picflowApi.saveData(nextData);
+      return nextData;
+    });
   }
 
   function removeGuideImage(caseId: string, imageId: string): void {
@@ -473,14 +525,20 @@ export default function App(): JSX.Element {
   }
 
   async function importImages(status: PicFlowCase['status'] = 'pending'): Promise<void> {
-    const images = await picflowApi.selectImages();
-    if (!images.length) return;
-    appendWork(createCase({ images, status, captureMethod: 'local-import' }));
-    setToast('已创建未命名作品');
+    if (!ensureLibraryReady()) return;
+    try {
+      const images = await picflowApi.selectImages();
+      if (!images.length) return;
+      appendWorks(images.map((image) => createCase({ images: [image], status, captureMethod: 'local-import' })));
+      setToast('\u5df2\u5bfc\u5165\u56fe\u7247');
+    } catch {
+      setToast('\u56fe\u7247\u5bfc\u5165\u5931\u8d25');
+    }
   }
 
   async function addMainImagesToSelected(): Promise<void> {
     if (!selectedCase) return;
+    if (!ensureLibraryReady()) return;
     const images = await picflowApi.selectImages();
     if (!images.length) return;
     addMainImagesToCase(selectedCase.id, images);
@@ -489,6 +547,7 @@ export default function App(): JSX.Element {
 
   async function addGuideImagesToSelected(): Promise<void> {
     if (!selectedCase) return;
+    if (!ensureLibraryReady()) return;
     const images = await picflowApi.selectImages('reference');
     if (!images.length) return;
     addGuideImagesToCase(selectedCase.id, images);
@@ -498,6 +557,7 @@ export default function App(): JSX.Element {
   async function importDroppedImages(event: DragEvent<HTMLElement>, target: 'asset' | 'reference' = 'asset'): Promise<PicFlowImage[]> {
     event.preventDefault();
     event.stopPropagation();
+    if (!ensureLibraryReady()) return [];
 
     const files = Array.from(event.dataTransfer.files ?? []);
     const imageFiles = files.filter(isImageFile);
@@ -513,15 +573,20 @@ export default function App(): JSX.Element {
       setToast('不支持该文件类型');
       return [];
     }
-    return picflowApi.importImagePaths(paths, target);
+    try {
+      return await picflowApi.importImagePaths(paths, target);
+    } catch {
+      setToast(target === 'reference' ? '\u56fe\u7247\u4fdd\u5b58\u5931\u8d25' : '\u56fe\u7247\u5bfc\u5165\u5931\u8d25');
+      return [];
+    }
   }
 
   async function handleGalleryDrop(event: DragEvent<HTMLElement>): Promise<void> {
     setGalleryDragging(false);
     const images = await importDroppedImages(event, 'asset');
     if (!images.length) return;
-    appendWork(createCase({ images, captureMethod: 'drag-drop' }));
-    setToast('已添加作品');
+    appendWorks(images.map((image) => createCase({ images: [image], captureMethod: 'drag-drop' })));
+    setToast('\u5df2\u5bfc\u5165\u56fe\u7247');
   }
 
   async function handleGuideDrop(event: DragEvent<HTMLElement>, caseId: string): Promise<void> {
@@ -546,20 +611,30 @@ export default function App(): JSX.Element {
     event.stopPropagation();
     const imageFile = Array.from(event.clipboardData.files ?? []).find((file) => file.type.startsWith('image/'));
     if (!imageFile) return;
+    if (!ensureLibraryReady()) return;
     event.preventDefault();
-    const dataUrl = await fileToDataUrl(imageFile);
-    const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'guide-image.png', 'reference');
-    addGuideImagesToCase(caseId, [image]);
-    setToast('已添加垫图');
+    try {
+      const dataUrl = await fileToDataUrl(imageFile);
+      const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'guide-image.png', 'reference');
+      addGuideImagesToCase(caseId, [image]);
+      setToast('\u5df2\u6dfb\u52a0\u57ab\u56fe');
+    } catch {
+      setToast('\u56fe\u7247\u4fdd\u5b58\u5931\u8d25');
+    }
   }
 
-  function addUrlImage(urlValue: string): void {
+  async function addUrlImage(urlValue: string): Promise<void> {
     const url = urlValue.trim();
     if (!url) return;
-    const image: PicFlowImage = { id: newId(), url, name: '图片链接', type: 'reference', addedAt: nowIso() };
-    appendWork(createCase({ images: [image], captureMethod: 'url-paste', sourceUrl: url }));
-    setSearch('');
-    setToast('已通过链接添加作品');
+    if (!ensureLibraryReady()) return;
+    try {
+      const image = await picflowApi.saveUrlImage(url);
+      appendWork(createCase({ images: [image], captureMethod: 'url-paste', sourceUrl: url }));
+      setSearch('');
+      setToast('\u5df2\u901a\u8fc7\u94fe\u63a5\u6dfb\u52a0\u4f5c\u54c1');
+    } catch {
+      setToast('\u6682\u4e0d\u652f\u6301\u8be5\u94fe\u63a5');
+    }
   }
 
   function handleSmartInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
@@ -572,7 +647,7 @@ export default function App(): JSX.Element {
       return;
     }
     event.preventDefault();
-    addUrlImage(value);
+    void addUrlImage(value);
   }
 
   function confirmCase(id: string): void {

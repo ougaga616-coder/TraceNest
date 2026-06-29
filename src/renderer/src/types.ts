@@ -71,6 +71,7 @@ export type PicFlowApi = {
   getPathForFile?: (file: File) => string;
   importImagePaths: (filePaths: string[], target?: PicFlowLibraryImageTarget) => Promise<PicFlowImage[]>;
   saveDataUrlImage: (dataUrl: string, name?: string, target?: PicFlowLibraryImageTarget) => Promise<PicFlowImage>;
+  saveUrlImage: (url: string) => Promise<PicFlowImage>;
   copyImage: (image: PicFlowImage) => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
 };

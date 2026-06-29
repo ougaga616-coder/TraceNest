@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, shell } from 'electron';
 import { cpSync, existsSync, mkdirSync, readFileSync, copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, normalize } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -163,6 +163,13 @@ function assetsDir(root: string): string {
 
 function referencesDir(root: string): string {
   return join(root, 'references');
+}
+
+function currentLibraryPathOrThrow(): string {
+  const libraryPath = getCurrentLibraryPath();
+  if (!libraryPath) throw new Error('No active PicFlow library');
+  ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath));
+  return libraryPath;
 }
 
 function readJson<T>(filePath: string, fallback: T): T {
@@ -415,7 +422,7 @@ function writeData(data: PicFlowData): PicFlowData {
 }
 
 function copyImageToLibrary(filePath: string, target: 'asset' | 'reference' = 'asset'): PicFlowImage {
-  const libraryPath = getCurrentLibraryPath() ?? ensureLibraryStructure(defaultLibraryPath(), '默认资源库').path;
+  const libraryPath = currentLibraryPathOrThrow();
   updateRecentLibrary(ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath)));
   const extension = extname(filePath) || '.png';
   const id = randomUUID();
@@ -431,7 +438,7 @@ function copyImageToLibrary(filePath: string, target: 'asset' | 'reference' = 'a
 }
 
 function saveDataUrlImage(dataUrl: string, name = 'clipboard-image.png', target: 'asset' | 'reference' = 'asset'): PicFlowImage {
-  const libraryPath = getCurrentLibraryPath() ?? ensureLibraryStructure(defaultLibraryPath(), '默认资源库').path;
+  const libraryPath = currentLibraryPathOrThrow();
   updateRecentLibrary(ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath)));
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
   if (!match) throw new Error('Unsupported image data');
@@ -445,6 +452,38 @@ function saveDataUrlImage(dataUrl: string, name = 'clipboard-image.png', target:
     localPath: targetPath,
     name,
     type: target === 'reference' ? 'reference' : 'screenshot',
+    addedAt: new Date().toISOString()
+  };
+}
+
+function extensionFromMime(mime: string, fallback = '.png'): string {
+  if (mime.includes('jpeg')) return '.jpg';
+  if (mime.includes('png')) return '.png';
+  if (mime.includes('webp')) return '.webp';
+  if (mime.includes('gif')) return '.gif';
+  if (mime.includes('bmp')) return '.bmp';
+  if (mime.includes('avif')) return '.avif';
+  return fallback;
+}
+
+async function saveUrlImage(url: string): Promise<PicFlowImage> {
+  const libraryPath = currentLibraryPathOrThrow();
+  updateRecentLibrary(ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath)));
+  const response = await net.fetch(url);
+  if (!response.ok) throw new Error(`Image request failed: ${response.status}`);
+  const mime = response.headers.get('content-type') ?? '';
+  if (!mime.startsWith('image/')) throw new Error('Unsupported image URL');
+  const urlPath = new URL(url).pathname;
+  const fallbackExtension = extname(urlPath) || extensionFromMime(mime);
+  const extension = fallbackExtension.startsWith('.') ? fallbackExtension : `.${fallbackExtension}`;
+  const id = randomUUID();
+  const targetPath = join(assetsDir(libraryPath), `${id}${extension}`);
+  writeFileSync(targetPath, Buffer.from(await response.arrayBuffer()));
+  return {
+    id,
+    localPath: targetPath,
+    name: basename(urlPath) || `image-${id}${extension}`,
+    type: 'cover',
     addedAt: new Date().toISOString()
   };
 }
@@ -619,6 +658,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('picflow:import-image-paths', (_event, filePaths: string[], target: 'asset' | 'reference' = 'asset') => filePaths.map((filePath) => copyImageToLibrary(filePath, target)));
   ipcMain.handle('picflow:save-data-url-image', (_event, dataUrl: string, name?: string, target: 'asset' | 'reference' = 'asset') => saveDataUrlImage(dataUrl, name, target));
+  ipcMain.handle('picflow:save-url-image', (_event, url: string) => saveUrlImage(url));
   ipcMain.handle('picflow:copy-image', (_event, image: PicFlowImage) => copyImageToClipboard(image));
   ipcMain.handle('picflow:open-external', (_event, url: string) => {
     if (url) shell.openExternal(url);
