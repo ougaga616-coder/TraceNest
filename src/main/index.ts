@@ -184,11 +184,17 @@ function readAppConfig(): PicFlowAppConfig {
   const seen = new Set<string>();
   const recentLibraries = (Array.isArray(config.recentLibraries) ? config.recentLibraries : []).filter((item) => {
     if (!item.path || seen.has(item.path)) return false;
+    if (!existsSync(item.path) || !existsSync(manifestPath(item.path))) return false;
     seen.add(item.path);
     return true;
   });
+  const currentLibraryPath = validLibraryPath(config.currentLibraryPath)
+    ? config.currentLibraryPath
+    : validLibraryPath(defaultLibraryPath())
+      ? defaultLibraryPath()
+      : undefined;
   return {
-    currentLibraryPath: config.currentLibraryPath,
+    currentLibraryPath,
     recentLibraries
   };
 }

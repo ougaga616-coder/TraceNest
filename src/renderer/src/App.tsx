@@ -325,7 +325,7 @@ export default function App(): JSX.Element {
 
   const counts = useMemo(
     () => ({
-      all: data.cases.filter((item) => item.status === 'confirmed').length,
+      all: data.cases.length,
       pending: data.cases.filter((item) => item.status === 'pending').length,
       favorites: data.cases.filter((item) => item.status === 'confirmed' && item.favorite).length
     }),
@@ -335,7 +335,7 @@ export default function App(): JSX.Element {
   const visibleCases = useMemo(() => {
     const searched = data.cases.filter((item) => matchesSearch(item, search));
     if (search.trim()) return searched;
-    if (activeView === 'all') return searched.filter((item) => item.status === 'confirmed');
+    if (activeView === 'all') return searched;
     if (activeView === 'pending') return searched.filter((item) => item.status === 'pending');
     if (activeView === 'favorites') return searched.filter((item) => item.status === 'confirmed' && item.favorite);
     const collectionId = activeView.replace('collection:', '');
