@@ -79,9 +79,21 @@ export type PicFlowWindowApi = {
   close: () => Promise<void>;
 };
 
+export type PicFlowLibraryResult = {
+  ok: boolean;
+  message: string;
+};
+
+export type PicFlowLibraryApi = {
+  createLibrary: () => Promise<PicFlowLibraryResult>;
+  addLibrary: () => Promise<PicFlowLibraryResult>;
+  openLibraryLocation: () => Promise<PicFlowLibraryResult>;
+};
+
 declare global {
   interface Window {
     picflow?: PicFlowApi;
     picflowWindow?: PicFlowWindowApi;
+    picflowLibrary?: PicFlowLibraryApi;
   }
 }

@@ -21,7 +21,7 @@ import {
   Upload,
   X
 } from 'lucide-react';
-import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, WheelEvent, useEffect, useMemo, useState } from 'react';
+import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { PicFlowCase, PicFlowCollection, PicFlowData, PicFlowImage } from './types';
 
 type ViewKey = 'all' | 'pending' | 'favorites' | `collection:${string}`;
@@ -74,6 +74,12 @@ const picflowWindow = window.picflowWindow ?? {
   minimize: async () => undefined,
   toggleMaximize: async () => undefined,
   close: async () => undefined
+};
+
+const picflowLibrary = window.picflowLibrary ?? {
+  createLibrary: async () => ({ ok: false, message: '创建资源库功能开发中' }),
+  addLibrary: async () => ({ ok: false, message: '添加资源库功能开发中' }),
+  openLibraryLocation: async () => ({ ok: false, message: '暂未找到资源库位置' })
 };
 
 function nowIso(): string {
@@ -199,6 +205,8 @@ export default function App(): JSX.Element {
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [sidePanelsCollapsed, setSidePanelsCollapsed] = useState(() => localStorage.getItem('picflow.sidePanelsCollapsed') === 'true');
   const [libraryMenuOpen, setLibraryMenuOpen] = useState(false);
+  const [libraryMenuPosition, setLibraryMenuPosition] = useState({ top: 0, right: 12 });
+  const libraryButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     void picflowApi.loadData().then((nextData) => {
@@ -223,6 +231,14 @@ export default function App(): JSX.Element {
   useEffect(() => {
     localStorage.setItem('picflow.sidePanelsCollapsed', String(sidePanelsCollapsed));
   }, [sidePanelsCollapsed]);
+
+  useEffect(() => {
+    if (!libraryMenuOpen) return;
+    const updatePosition = () => updateLibraryMenuPosition();
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
+  }, [libraryMenuOpen]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -576,6 +592,31 @@ export default function App(): JSX.Element {
     });
   }
 
+  function updateLibraryMenuPosition(): void {
+    const rect = libraryButtonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setLibraryMenuPosition({
+      top: Math.min(rect.bottom + 8, window.innerHeight - 190),
+      right: Math.max(12, window.innerWidth - rect.right)
+    });
+  }
+
+  function toggleLibraryMenu(): void {
+    if (!libraryMenuOpen) updateLibraryMenuPosition();
+    setLibraryMenuOpen((value) => !value);
+  }
+
+  async function runLibraryAction(action: 'create' | 'add' | 'open'): Promise<void> {
+    setLibraryMenuOpen(false);
+    const result =
+      action === 'create'
+        ? await picflowLibrary.createLibrary()
+        : action === 'add'
+          ? await picflowLibrary.addLibrary()
+          : await picflowLibrary.openLibraryLocation();
+    setToast(result.message);
+  }
+
   const cardWidth = Math.round(200 * cardScale);
   const cardHeight = Math.round(260 * cardScale);
   const cardGap = Math.round(18 * cardScale);
@@ -614,23 +655,16 @@ export default function App(): JSX.Element {
             {sidePanelsCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
 
-          <div className="relative" data-library-menu="true">
+          <div data-library-menu="true">
             <button
+              ref={libraryButtonRef}
               className="toolbar-icon-button"
-              onClick={() => setLibraryMenuOpen((value) => !value)}
+              onClick={toggleLibraryMenu}
               aria-label="资源库"
               title="资源库"
             >
               <Database className="h-4 w-4" />
             </button>
-            {libraryMenuOpen && (
-              <div className="library-menu">
-                <div className="library-menu-current">当前资源库：默认资源库</div>
-                <button type="button">创建资源库...</button>
-                <button type="button">添加资源库...</button>
-                <button type="button">打开资源库位置</button>
-              </div>
-            )}
           </div>
 
           <button className="toolbar-icon-button" onClick={() => setDarkMode((value) => !value)} aria-label="切换浅色深色模式" title="切换浅色 / 深色模式">
@@ -787,6 +821,25 @@ export default function App(): JSX.Element {
         </div>
         )}
       </main>
+
+      {libraryMenuOpen && (
+        <div
+          className="library-menu"
+          data-library-menu="true"
+          style={{ top: libraryMenuPosition.top, right: libraryMenuPosition.right }}
+        >
+          <div className="library-menu-current">当前资源库：默认资源库</div>
+          <button type="button" className="library-menu-item" onClick={() => void runLibraryAction('create')}>
+            创建资源库...
+          </button>
+          <button type="button" className="library-menu-item" onClick={() => void runLibraryAction('add')}>
+            添加资源库...
+          </button>
+          <button type="button" className="library-menu-item" onClick={() => void runLibraryAction('open')}>
+            打开资源库位置
+          </button>
+        </div>
+      )}
 
       {toast && <div className="toast">{toast}</div>}
 

@@ -56,6 +56,11 @@ type PicFlowData = {
   };
 };
 
+type PicFlowLibraryActionResult = {
+  ok: boolean;
+  message: string;
+};
+
 const emptyData = (): PicFlowData => ({ version: 1, cases: [], collections: [], settings: { theme: 'light', cardScale: 1.12 } });
 let mainWindow: BrowserWindow | null = null;
 
@@ -152,6 +157,62 @@ function copyImageToClipboard(image: PicFlowImage): boolean {
   return true;
 }
 
+async function createLibraryShell(): Promise<PicFlowLibraryActionResult> {
+  const result = await dialog.showOpenDialog({
+    title: '创建 PicFlow 资源库',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, message: '已取消创建资源库' };
+
+  try {
+    const root = join(result.filePaths[0], 'PicFlow Library');
+    const manifestPath = join(root, 'picflow-library.json');
+    if (existsSync(manifestPath)) return { ok: false, message: '资源库已存在' };
+
+    mkdirSync(join(root, 'data'), { recursive: true });
+    mkdirSync(join(root, 'assets'), { recursive: true });
+    mkdirSync(join(root, 'references'), { recursive: true });
+
+    const timestamp = new Date().toISOString();
+    writeFileSync(
+      manifestPath,
+      JSON.stringify(
+        {
+          name: '默认资源库',
+          version: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+    return { ok: true, message: '已创建资源库' };
+  } catch {
+    return { ok: false, message: '资源库创建失败' };
+  }
+}
+
+async function addLibraryShell(): Promise<PicFlowLibraryActionResult> {
+  const result = await dialog.showOpenDialog({
+    title: '添加 PicFlow 资源库',
+    properties: ['openDirectory']
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, message: '已取消添加资源库' };
+
+  const manifestPath = join(result.filePaths[0], 'picflow-library.json');
+  if (!existsSync(manifestPath)) return { ok: false, message: '这不是有效的 PicFlow 资源库' };
+  return { ok: true, message: '已识别资源库，真实切换功能将在下一步实现' };
+}
+
+async function openLibraryLocation(): Promise<PicFlowLibraryActionResult> {
+  ensureStorage();
+  const error = await shell.openPath(dataDir());
+  if (error) return { ok: false, message: '暂未找到资源库位置' };
+  return { ok: true, message: '已打开资源库位置' };
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -203,6 +264,9 @@ app.whenReady().then(() => {
   ipcMain.handle('picflow:open-external', (_event, url: string) => {
     if (url) shell.openExternal(url);
   });
+  ipcMain.handle('library:create', () => createLibraryShell());
+  ipcMain.handle('library:add', () => addLibraryShell());
+  ipcMain.handle('library:open-location', () => openLibraryLocation());
   ipcMain.handle('window:minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

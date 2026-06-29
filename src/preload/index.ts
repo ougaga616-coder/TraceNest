@@ -17,3 +17,9 @@ contextBridge.exposeInMainWorld('picflowWindow', {
   toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
   close: () => ipcRenderer.invoke('window:close')
 });
+
+contextBridge.exposeInMainWorld('picflowLibrary', {
+  createLibrary: () => ipcRenderer.invoke('library:create'),
+  addLibrary: () => ipcRenderer.invoke('library:add'),
+  openLibraryLocation: () => ipcRenderer.invoke('library:open-location')
+});
