@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { PostImportInfoModal, type PostImportInfoPayload } from './components/PostImportInfoModal';
 import type { PicFlowCase, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
 import { formatModelTagsForCopy, formatWorkSummaryForCopy } from './utils/workCopy';
 import { matchesWorkSearch } from './utils/workSearch';
@@ -231,6 +232,7 @@ export default function App(): JSX.Element {
   const [libraryState, setLibraryState] = useState<PicFlowLibraryState>(emptyLibraryState);
   const [libraryRefreshing, setLibraryRefreshing] = useState(false);
   const [cutWorkId, setCutWorkId] = useState<string | null>(null);
+  const [postImportCaseId, setPostImportCaseId] = useState<string | null>(null);
   const libraryButtonRef = useRef<HTMLButtonElement | null>(null);
   const suppressSaveRef = useRef(false);
 
@@ -282,6 +284,7 @@ export default function App(): JSX.Element {
       if (isTextEditingTarget(event.target)) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-guide-dropzone="true"]')) return;
+      if (postImportCaseId) return;
       if (cutWorkId) {
         event.preventDefault();
         pasteCutWorkToCurrentCollection();
@@ -292,9 +295,9 @@ export default function App(): JSX.Element {
       if (!ensureLibraryReady()) return;
       event.preventDefault();
       try {
-        const dataUrl = await fileToDataUrl(imageFile);
-        const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'clipboard-image.png');
-        appendWork(createCase({ images: [image], captureMethod: 'clipboard-paste' }));
+      const dataUrl = await fileToDataUrl(imageFile);
+      const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'clipboard-image.png');
+        appendWork(createCase({ images: [image], captureMethod: 'clipboard-paste' }), { openPostImportModal: true });
         setToast('\u5df2\u4ece\u526a\u8d34\u677f\u5bfc\u5165\u56fe\u7247');
       } catch {
         setToast('\u56fe\u7247\u4fdd\u5b58\u5931\u8d25');
@@ -302,13 +305,14 @@ export default function App(): JSX.Element {
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [activeView, cutWorkId, data.cases, data.collections, libraryState.ready]);
+  }, [activeView, cutWorkId, data.cases, data.collections, libraryState.ready, postImportCaseId]);
 
   const selectedCase = data.cases.find((item) => item.id === selectedId) ?? null;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTextEditingTarget(event.target)) return;
+      if (postImportCaseId) return;
       if (event.ctrlKey && event.key.toLowerCase() === 'x') {
         event.preventDefault();
         if (!selectedCase) {
@@ -325,7 +329,7 @@ export default function App(): JSX.Element {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedCase]);
+  }, [postImportCaseId, selectedCase]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -365,6 +369,7 @@ export default function App(): JSX.Element {
   }, [selectedId, visibleCases]);
 
   const visibleSelectedCase = selectedId ? visibleCases.find((item) => item.id === selectedId) ?? null : null;
+  const postImportCase = postImportCaseId ? data.cases.find((item) => item.id === postImportCaseId) ?? null : null;
   const visibleRecentLibraries = useMemo(() => {
     const seen = new Set<string>();
     const currentPath = libraryState.currentLibrary?.path;
@@ -466,7 +471,7 @@ export default function App(): JSX.Element {
     }));
   }
 
-  function appendWork(item: PicFlowCase): void {
+  function appendWork(item: PicFlowCase, options: { openPostImportModal?: boolean } = {}): void {
     setData((current) => {
       const nextData = { ...current, cases: [item, ...current.cases] };
       void picflowApi.saveData(nextData);
@@ -474,6 +479,7 @@ export default function App(): JSX.Element {
     });
     setSelectedId(item.id);
     setActiveView(item.status === 'pending' ? 'pending' : 'all');
+    if (options.openPostImportModal) setPostImportCaseId(item.id);
   }
 
   function appendWorks(items: PicFlowCase[]): void {
@@ -517,8 +523,17 @@ export default function App(): JSX.Element {
   }
 
   function removeGuideImage(caseId: string, imageId: string): void {
-    updateCase(caseId, {
-      referenceImages: selectedCase?.referenceImages?.filter((image) => image.id !== imageId) ?? []
+    setData((current) => {
+      const nextData = {
+        ...current,
+        cases: current.cases.map((item) =>
+          item.id === caseId
+            ? { ...item, referenceImages: (item.referenceImages ?? []).filter((image) => image.id !== imageId), updatedAt: nowIso() }
+            : item
+        )
+      };
+      void picflowApi.saveData(nextData);
+      return nextData;
     });
   }
 
@@ -532,8 +547,14 @@ export default function App(): JSX.Element {
     try {
       const images = await picflowApi.selectImages();
       if (!images.length) return;
-      appendWorks(images.map((image) => createCase({ images: [image], status, captureMethod: 'local-import' })));
-      setToast('\u5df2\u5bfc\u5165\u56fe\u7247');
+      const works = images.map((image) => createCase({ images: [image], status, captureMethod: 'local-import' }));
+      if (works.length === 1) {
+        appendWork(works[0], { openPostImportModal: true });
+        setToast('\u5df2\u5bfc\u5165\u56fe\u7247');
+        return;
+      }
+      appendWorks(works);
+      setToast(`\u5df2\u5bfc\u5165 ${works.length} \u5f20\u56fe\u7247`);
     } catch {
       setToast('\u56fe\u7247\u5bfc\u5165\u5931\u8d25');
     }
@@ -555,6 +576,18 @@ export default function App(): JSX.Element {
     if (!images.length) return;
     addGuideImagesToCase(selectedCase.id, images);
     setToast('已添加垫图');
+  }
+
+  async function addGuideImagesToImportedCase(caseId: string): Promise<void> {
+    if (!ensureLibraryReady()) return;
+    try {
+      const images = await picflowApi.selectImages('reference');
+      if (!images.length) return;
+      addGuideImagesToCase(caseId, images);
+      setToast('\u5df2\u6dfb\u52a0\u57ab\u56fe');
+    } catch {
+      setToast('\u57ab\u56fe\u6dfb\u52a0\u5931\u8d25');
+    }
   }
 
   async function importDroppedImages(event: DragEvent<HTMLElement>, target: 'asset' | 'reference' = 'asset'): Promise<PicFlowImage[]> {
@@ -588,8 +621,14 @@ export default function App(): JSX.Element {
     setGalleryDragging(false);
     const images = await importDroppedImages(event, 'asset');
     if (!images.length) return;
-    appendWorks(images.map((image) => createCase({ images: [image], captureMethod: 'drag-drop' })));
-    setToast('\u5df2\u5bfc\u5165\u56fe\u7247');
+    const works = images.map((image) => createCase({ images: [image], captureMethod: 'drag-drop' }));
+    if (works.length === 1) {
+      appendWork(works[0], { openPostImportModal: true });
+      setToast('\u5df2\u5bfc\u5165\u56fe\u7247');
+      return;
+    }
+    appendWorks(works);
+    setToast(`\u5df2\u5bfc\u5165 ${works.length} \u5f20\u56fe\u7247`);
   }
 
   async function handleGuideDrop(event: DragEvent<HTMLElement>, caseId: string): Promise<void> {
@@ -632,7 +671,7 @@ export default function App(): JSX.Element {
     if (!ensureLibraryReady()) return;
     try {
       const image = await picflowApi.saveUrlImage(url);
-      appendWork(createCase({ images: [image], captureMethod: 'url-paste', sourceUrl: url }));
+      appendWork(createCase({ images: [image], captureMethod: 'url-paste', sourceUrl: url }), { openPostImportModal: true });
       setSearch('');
       setToast('\u5df2\u901a\u8fc7\u94fe\u63a5\u6dfb\u52a0\u4f5c\u54c1');
     } catch {
@@ -659,6 +698,37 @@ export default function App(): JSX.Element {
     const nextStatus: PicFlowCase['status'] = item.status === 'pending' ? 'confirmed' : 'pending';
     updateCase(id, { status: nextStatus });
     setToast(nextStatus === 'confirmed' ? '\u5df2\u6574\u7406\u5b8c\u6210' : '\u5df2\u6807\u8bb0\u4e3a\u5f85\u6574\u7406');
+  }
+
+  async function savePostImportInfo(caseId: string, payload: PostImportInfoPayload): Promise<void> {
+    const nextData = {
+      ...data,
+      cases: data.cases.map((item) =>
+        item.id === caseId
+          ? {
+              ...item,
+              prompt: payload.prompt,
+              modelTags: payload.modelTags,
+              collectionId: payload.collectionId,
+              status: 'confirmed' as const,
+              updatedAt: nowIso()
+            }
+          : item
+      )
+    };
+    try {
+      await picflowApi.saveData(nextData);
+      setData(nextData);
+      setPostImportCaseId(null);
+      setToast('\u5df2\u4fdd\u5b58\u4f5c\u54c1\u4fe1\u606f');
+    } catch {
+      setToast('\u4fdd\u5b58\u5931\u8d25');
+    }
+  }
+
+  function skipPostImportInfo(): void {
+    setPostImportCaseId(null);
+    setToast('\u5df2\u8df3\u8fc7\uff0c\u53ef\u7a0d\u540e\u6574\u7406');
   }
 
   function copyText(value: string | undefined, label: string): void {
@@ -1231,6 +1301,21 @@ export default function App(): JSX.Element {
           onChooseCustom={() => void setupLibrary('custom')}
           onAddExisting={() => void setupLibrary('add')}
           onCreateNew={() => void setupLibrary('create')}
+        />
+      )}
+
+      {postImportCase && (
+        <PostImportInfoModal
+          item={postImportCase}
+          collections={data.collections}
+          modelPresets={modelPresets}
+          coverSrc={imageSrc(coverImage(postImportCase))}
+          getImageSrc={imageSrc}
+          onSkip={skipPostImportInfo}
+          onSave={(payload) => savePostImportInfo(postImportCase.id, payload)}
+          onAddGuideImages={() => addGuideImagesToImportedCase(postImportCase.id)}
+          onGuidePaste={(event) => handleGuidePaste(event, postImportCase.id)}
+          onRemoveGuideImage={removeGuideImage}
         />
       )}
 
