@@ -7,9 +7,12 @@ import {
   ImagePlus,
   Inbox,
   Link,
+  Database,
   Minus,
   Moon,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Square,
@@ -194,6 +197,8 @@ export default function App(): JSX.Element {
   const [darkMode, setDarkMode] = useState(false);
   const [cardScale, setCardScale] = useState(1.12);
   const [galleryDragging, setGalleryDragging] = useState(false);
+  const [sidePanelsCollapsed, setSidePanelsCollapsed] = useState(() => localStorage.getItem('picflow.sidePanelsCollapsed') === 'true');
+  const [libraryMenuOpen, setLibraryMenuOpen] = useState(false);
 
   useEffect(() => {
     void picflowApi.loadData().then((nextData) => {
@@ -214,6 +219,10 @@ export default function App(): JSX.Element {
     if (!loaded) return;
     setData((current) => ({ ...current, settings: { ...current.settings, cardScale } }));
   }, [cardScale]);
+
+  useEffect(() => {
+    localStorage.setItem('picflow.sidePanelsCollapsed', String(sidePanelsCollapsed));
+  }, [sidePanelsCollapsed]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -265,6 +274,7 @@ export default function App(): JSX.Element {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target?.closest('[data-model-combobox="true"]')) setModelOpen(false);
+      if (!target?.closest('[data-library-menu="true"]')) setLibraryMenuOpen(false);
     };
     window.addEventListener('pointerdown', onPointerDown);
     return () => window.removeEventListener('pointerdown', onPointerDown);
@@ -576,37 +586,69 @@ export default function App(): JSX.Element {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => event.preventDefault()}
     >
-      <header
-        className="app-titlebar grid h-[112px] shrink-0 border-b border-[#d9ded8]/80 bg-[#f7f8f5]/92 backdrop-blur dark:border-[#383838] dark:bg-[#2d2d2d]/95"
-        style={{ gridTemplateColumns: '260px minmax(620px, 1fr) 384px' }}
-      >
-        <BrandHeader />
-        <div className="toolbar flex min-w-0 items-center gap-2.5 px-5">
-          <label className="relative flex h-10 min-w-[260px] max-w-[460px] flex-[1_1_380px] items-center">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-neutral-500" />
-            <input
-              className="h-10 w-full rounded-[10px] border border-[#d7ddd6] bg-[#fbfbfa] py-0 pl-10 pr-3 text-sm leading-10 text-ink outline-none transition placeholder:text-stone-400 hover:border-[#cbd2ca] focus:border-[#8faf9b] focus:ring-2 focus:ring-[#8faf9b]/20 dark:border-[#4a4a4a] dark:bg-[#343434] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:hover:border-[#5a5a5a] dark:focus:border-[#afc7b6] dark:focus:ring-[#afc7b6]/20"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={handleSmartInputKeyDown}
-              placeholder="搜索作品 / 粘贴图片链接"
-            />
-          </label>
-          <button className="primary-button shrink-0" onClick={() => importImages()} aria-label="导入图片">
-            <Upload className="h-4 w-4" />
-            导入图片
+      <header className="app-titlebar">
+        <div className="titlebar-brand">
+          <span className="titlebar-brand-name">图迹</span>
+          <span className="titlebar-separator">/</span>
+          <span className="titlebar-current-view">{search.trim() ? '搜索结果' : viewTitle(activeView, data.collections)}</span>
+        </div>
+
+        <label className="titlebar-search">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-neutral-500" />
+          <input
+            className="smart-search-input"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={handleSmartInputKeyDown}
+            placeholder="搜索作品 / 粘贴图片链接"
+          />
+        </label>
+
+        <div className="titlebar-actions">
+          <button
+            className="toolbar-icon-button"
+            onClick={() => setSidePanelsCollapsed((value) => !value)}
+            aria-label={sidePanelsCollapsed ? '显示侧栏' : '隐藏侧栏'}
+            title={sidePanelsCollapsed ? '显示侧栏' : '隐藏侧栏'}
+          >
+            {sidePanelsCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
-          <button className="toolbar-icon-button shrink-0" onClick={() => setDarkMode((value) => !value)} aria-label="切换浅色深色模式" title="切换浅色 / 深色模式">
+
+          <div className="relative" data-library-menu="true">
+            <button
+              className="toolbar-icon-button"
+              onClick={() => setLibraryMenuOpen((value) => !value)}
+              aria-label="资源库"
+              title="资源库"
+            >
+              <Database className="h-4 w-4" />
+            </button>
+            {libraryMenuOpen && (
+              <div className="library-menu">
+                <div className="library-menu-current">当前资源库：默认资源库</div>
+                <button type="button">创建资源库...</button>
+                <button type="button">添加资源库...</button>
+                <button type="button">打开资源库位置</button>
+              </div>
+            )}
+          </div>
+
+          <button className="toolbar-icon-button" onClick={() => setDarkMode((value) => !value)} aria-label="切换浅色深色模式" title="切换浅色 / 深色模式">
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
         </div>
-        <div className="flex items-center justify-end bg-[#e6eae5] px-4 dark:bg-[#282828]">
-          <WindowControls />
-        </div>
+
+        <WindowControls />
       </header>
 
-      <main className="grid min-h-0 flex-1" style={{ gridTemplateColumns: '260px minmax(620px, 1fr) 384px' }}>
-        <aside className="flex min-h-0 flex-col bg-[#f4f5f2] px-4 py-5 dark:bg-[#2b2b2b]">
+      <main
+        className="grid min-h-0 flex-1"
+        style={{ gridTemplateColumns: sidePanelsCollapsed ? 'minmax(620px, 1fr)' : '260px minmax(620px, 1fr) 384px' }}
+      >
+        {!sidePanelsCollapsed && (
+        <aside className="flex min-h-0 flex-col bg-[#f4f5f2] dark:bg-[#2b2b2b]">
+          <BrandHeader />
+          <div className="px-4 py-5">
           <nav className="space-y-1.5">
             <SidebarRow active={activeView === 'all'} icon={<MoreHorizontal />} label="全部作品" count={counts.all} onClick={() => setActiveView('all')} />
             <SidebarRow active={activeView === 'pending'} icon={<Inbox />} label="待确认" count={counts.pending} onClick={() => setActiveView('pending')} />
@@ -655,7 +697,9 @@ export default function App(): JSX.Element {
               })}
             </div>
           </div>
+          </div>
         </aside>
+        )}
 
         <section
           className={`min-h-0 overflow-y-auto bg-[#e6eae5] px-7 py-6 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#e1e6f3] dark:bg-[#2d2b33]' : ''}`}
@@ -717,6 +761,7 @@ export default function App(): JSX.Element {
           )}
         </section>
 
+        {!sidePanelsCollapsed && (
         <div className="min-h-0 bg-[#e1e6df] p-4 pl-2 dark:bg-[#282828]">
         <DetailPanel
           item={visibleSelectedCase}
@@ -740,6 +785,7 @@ export default function App(): JSX.Element {
           onCopy={copyText}
         />
         </div>
+        )}
       </main>
 
       {toast && <div className="toast">{toast}</div>}
