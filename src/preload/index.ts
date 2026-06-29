@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('picflowWindow', {
 
 contextBridge.exposeInMainWorld('picflowLibrary', {
   getCurrentLibrary: () => ipcRenderer.invoke('library:get-current'),
+  loadCurrentData: () => ipcRenderer.invoke('library:load-current-data'),
   setupDefaultLibrary: () => ipcRenderer.invoke('library:setup-default'),
   chooseCustomLibrary: () => ipcRenderer.invoke('library:choose-custom'),
   createLibrary: () => ipcRenderer.invoke('library:create'),

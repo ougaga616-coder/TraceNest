@@ -102,8 +102,24 @@ export type PicFlowLibraryState = {
   recentLibraries: PicFlowLibrarySummary[];
 };
 
+export type PicFlowLibraryLoadResult = {
+  ok: boolean;
+  message?: string;
+  state: PicFlowLibraryState;
+  data?: PicFlowData;
+  debug?: {
+    currentLibraryPath: string;
+    worksPath: string;
+    collectionsPath: string;
+    settingsPath: string;
+    worksCount: number;
+    collectionsCount: number;
+  };
+};
+
 export type PicFlowLibraryApi = {
   getCurrentLibrary: () => Promise<PicFlowLibraryState>;
+  loadCurrentData: () => Promise<PicFlowLibraryLoadResult>;
   setupDefaultLibrary: () => Promise<PicFlowLibraryResult>;
   chooseCustomLibrary: () => Promise<PicFlowLibraryResult>;
   createLibrary: () => Promise<PicFlowLibraryResult>;

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
 import { cpSync, existsSync, mkdirSync, readFileSync, copyFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, normalize } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 type PicFlowCaptureMethod = 'manual' | 'local-import' | 'drag-drop' | 'clipboard-paste' | 'url-paste';
@@ -87,6 +87,23 @@ type PicFlowLibraryState = {
   missing: boolean;
   currentLibrary?: PicFlowLibrarySummary;
   recentLibraries: PicFlowLibrarySummary[];
+};
+
+type PicFlowLibraryLoadDebug = {
+  currentLibraryPath: string;
+  worksPath: string;
+  collectionsPath: string;
+  settingsPath: string;
+  worksCount: number;
+  collectionsCount: number;
+};
+
+type PicFlowLibraryLoadResult = {
+  ok: boolean;
+  message?: string;
+  state: PicFlowLibraryState;
+  data?: PicFlowData;
+  debug?: PicFlowLibraryLoadDebug;
 };
 
 const emptyData = (): PicFlowData => ({ version: 1, cases: [], collections: [], settings: { theme: 'light', cardScale: 1.12 } });
@@ -206,6 +223,33 @@ function normalizeData(data: Partial<PicFlowData>): PicFlowData {
   };
 }
 
+function isExternalImagePath(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('data:');
+}
+
+function normalizeLibraryLocalPath(libraryPath: string, value?: string): string | undefined {
+  if (!value || isExternalImagePath(value) || isAbsolute(value)) return value;
+  return normalize(join(libraryPath, value));
+}
+
+function normalizeLibraryImage(libraryPath: string, image: PicFlowImage): PicFlowImage {
+  return {
+    ...image,
+    localPath: normalizeLibraryLocalPath(libraryPath, image.localPath)
+  };
+}
+
+function normalizeLibraryDataForRead(libraryPath: string, data: PicFlowData): PicFlowData {
+  return {
+    ...data,
+    cases: data.cases.map((item) => ({
+      ...item,
+      images: (item.images ?? []).map((image) => normalizeLibraryImage(libraryPath, image)),
+      referenceImages: (item.referenceImages ?? []).map((image) => normalizeLibraryImage(libraryPath, image))
+    }))
+  };
+}
+
 function readLegacyData(): PicFlowData {
   return normalizeData(readJson<PicFlowData>(legacyDataPath(), emptyData()));
 }
@@ -297,16 +341,55 @@ function getLibraryState(): PicFlowLibraryState {
   };
 }
 
-function readData(): PicFlowData {
-  const libraryPath = getCurrentLibraryPath();
-  if (!libraryPath) return emptyData();
+function readDataFromLibrary(libraryPath: string): PicFlowData {
   ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath));
-  return {
+  return normalizeLibraryDataForRead(libraryPath, {
     version: 1,
     cases: readJson<PicFlowCase[]>(worksPath(libraryPath), []),
     collections: readJson<PicFlowCollection[]>(collectionsPath(libraryPath), []),
     settings: readJson<PicFlowData['settings']>(settingsPath(libraryPath), { theme: 'light', cardScale: 1.12 })
-  };
+  });
+}
+
+function readData(): PicFlowData {
+  const libraryPath = getCurrentLibraryPath();
+  if (!libraryPath) return emptyData();
+  return readDataFromLibrary(libraryPath);
+}
+
+function loadCurrentLibraryData(): PicFlowLibraryLoadResult {
+  const state = getLibraryState();
+  const libraryPath = state.currentLibrary?.path ?? getCurrentLibraryPath();
+  if (!state.ready || !libraryPath) {
+    return {
+      ok: false,
+      message: '未找到当前资源库',
+      state
+    };
+  }
+
+  try {
+    const data = readDataFromLibrary(libraryPath);
+    return {
+      ok: true,
+      state: getLibraryState(),
+      data,
+      debug: {
+        currentLibraryPath: libraryPath,
+        worksPath: worksPath(libraryPath),
+        collectionsPath: collectionsPath(libraryPath),
+        settingsPath: settingsPath(libraryPath),
+        worksCount: data.cases.length,
+        collectionsCount: data.collections.length
+      }
+    };
+  } catch {
+    return {
+      ok: false,
+      message: '资源库数据读取失败',
+      state
+    };
+  }
 }
 
 function writeData(data: PicFlowData): PicFlowData {
@@ -535,6 +618,7 @@ app.whenReady().then(() => {
     if (url) shell.openExternal(url);
   });
   ipcMain.handle('library:get-current', () => getLibraryState());
+  ipcMain.handle('library:load-current-data', () => loadCurrentLibraryData());
   ipcMain.handle('library:setup-default', () => setupDefaultLibrary());
   ipcMain.handle('library:choose-custom', () => chooseCustomLibrary());
   ipcMain.handle('library:create', () => createLibraryShell());

@@ -80,6 +80,23 @@ const picflowWindow = window.picflowWindow ?? {
 };
 
 const fallbackPicflowLibrary: PicFlowLibraryApi = {
+  loadCurrentData: async () => {
+    const data = await picflowApi.loadData();
+    const state = await fallbackPicflowLibrary.getCurrentLibrary();
+    return {
+      ok: true,
+      state,
+      data,
+      debug: {
+        currentLibraryPath: '',
+        worksPath: 'browser-preview/works.json',
+        collectionsPath: 'browser-preview/collections.json',
+        settingsPath: 'browser-preview/settings.json',
+        worksCount: data.cases.length,
+        collectionsCount: data.collections.length
+      }
+    };
+  },
   getCurrentLibrary: async () => ({ ready: true, setupRequired: false, missing: false, currentLibrary: { name: '浏览器预览', path: '', lastOpenedAt: nowIso() }, recentLibraries: [] }),
   setupDefaultLibrary: async () => ({ ok: true, message: '已创建默认资源库' }),
   chooseCustomLibrary: async () => ({ ok: false, message: '桌面应用中可选择自定义位置' }),
@@ -219,9 +236,10 @@ export default function App(): JSX.Element {
   const [libraryState, setLibraryState] = useState<PicFlowLibraryState>(emptyLibraryState);
   const [libraryRefreshing, setLibraryRefreshing] = useState(false);
   const libraryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const suppressSaveRef = useRef(false);
 
   useEffect(() => {
-    void loadCurrentLibrary();
+    void loadCurrentLibraryDataAndApply('startup');
   }, []);
 
   useEffect(() => {
@@ -250,6 +268,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!loaded) return;
     if (!libraryState.ready) return;
+    if (suppressSaveRef.current) return;
     const timer = window.setTimeout(() => {
       void picflowApi.saveData(data);
     }, 350);
@@ -339,22 +358,68 @@ export default function App(): JSX.Element {
     });
   }, [libraryState.currentLibrary?.path, libraryState.recentLibraries]);
 
-  async function loadCurrentLibrary(nextState?: PicFlowLibraryState, options: { resetView?: boolean } = { resetView: true }): Promise<void> {
-    const state = nextState ?? await picflowLibrary.getCurrentLibrary();
-    setLibraryState(state);
-    if (!state.ready) {
-      setData(emptyData);
-      setSelectedId(null);
-      setLoaded(true);
-      return;
+  async function loadCurrentLibraryDataAndApply(
+    reason: 'startup' | 'switch' | 'refresh',
+    options: { resetView?: boolean; keepSelection?: boolean } = { resetView: true }
+  ): Promise<boolean> {
+    if (reason === 'refresh') console.info('[library refresh] clicked');
+
+    const result = await picflowLibrary.loadCurrentData();
+    const debug = result.debug;
+    const prefix = reason === 'switch' ? '[library switch]' : reason === 'refresh' ? '[library refresh]' : '[library startup]';
+
+    if (debug) {
+      console.info(`${prefix} currentLibraryPath:`, debug.currentLibraryPath);
+      if (reason === 'refresh') {
+        console.info('[library refresh] works path:', debug.worksPath);
+        console.info('[library refresh] collections path:', debug.collectionsPath);
+      }
+      console.info(`${prefix} works count:`, debug.worksCount);
+      console.info(`${prefix} collections count:`, debug.collectionsCount);
     }
-    const nextData = await picflowApi.loadData();
-    setData(nextData ?? emptyData);
-    setDarkMode(nextData?.settings?.theme === 'dark');
-    setCardScale(nextData?.settings?.cardScale ?? 1.12);
-    setSelectedId(null);
-    if (options.resetView !== false) setActiveView('all');
+
+    setLibraryState(result.state);
+    if (!result.ok || !result.state.ready || !result.data) {
+      if (reason !== 'startup') setToast(result.message ?? '资源库数据读取失败');
+      if (!result.state.ready) {
+        suppressSaveRef.current = true;
+        setData(emptyData);
+        setSelectedId(null);
+        window.setTimeout(() => {
+          suppressSaveRef.current = false;
+        }, 300);
+      }
+      setLoaded(true);
+      return false;
+    }
+
+    if (reason === 'refresh') console.info('[library refresh] applying state...');
+    suppressSaveRef.current = true;
+    const nextData = result.data;
+    setData(nextData);
+    setDarkMode(nextData.settings?.theme === 'dark');
+    setCardScale(nextData.settings?.cardScale ?? 1.12);
+    setSelectedId((current) => {
+      if (options.keepSelection && current && nextData.cases.some((item) => item.id === current)) return current;
+      return null;
+    });
+    if (options.resetView !== false) {
+      setActiveView('all');
+      setSearch('');
+    } else {
+      setActiveView((current) => {
+        if (!current.startsWith('collection:')) return current;
+        const collectionId = current.replace('collection:', '');
+        return nextData.collections.some((item) => item.id === collectionId) ? current : 'all';
+      });
+    }
     setLoaded(true);
+    window.setTimeout(() => {
+      suppressSaveRef.current = false;
+    }, 300);
+    if (reason === 'refresh') console.info('[library refresh] done');
+    if (reason === 'switch') console.info('[library switch] state applied');
+    return true;
   }
 
   function persist(nextData: PicFlowData): void {
@@ -660,30 +725,27 @@ export default function App(): JSX.Element {
           : await picflowLibrary.openLibraryLocation();
     setToast(result.message);
     if (result.state) setLibraryState(result.state);
-    if (result.ok && action !== 'open') await loadCurrentLibrary(result.state);
+    if (result.ok && action !== 'open') await loadCurrentLibraryDataAndApply('switch', { resetView: true });
   }
 
   async function switchRecentLibrary(path: string): Promise<void> {
     setLibraryMenuOpen(false);
+    console.info('[library switch] target path:', path);
     const result = await picflowLibrary.switchLibrary(path);
     setToast(result.message);
     if (result.state) setLibraryState(result.state);
-    if (result.ok) await loadCurrentLibrary(result.state);
+    if (result.ok) {
+      console.info('[library switch] switch success');
+      await loadCurrentLibraryDataAndApply('switch', { resetView: true });
+    }
   }
 
   async function refreshCurrentLibrary(): Promise<void> {
     if (libraryRefreshing) return;
     setLibraryRefreshing(true);
     try {
-      const state = await picflowLibrary.getCurrentLibrary();
-      setLibraryState(state);
-      if (!state.ready) {
-        setToast('未找到当前资源库');
-        await loadCurrentLibrary(state, { resetView: false });
-        return;
-      }
-      await loadCurrentLibrary(state, { resetView: false });
-      setToast('已刷新资源库');
+      const ok = await loadCurrentLibraryDataAndApply('refresh', { resetView: false, keepSelection: true });
+      if (ok) setToast('已刷新资源库');
     } catch {
       setToast('资源库刷新失败');
     } finally {
@@ -702,7 +764,7 @@ export default function App(): JSX.Element {
             : await picflowLibrary.createLibrary();
     setToast(result.message);
     if (result.state) setLibraryState(result.state);
-    if (result.ok) await loadCurrentLibrary(result.state);
+    if (result.ok) await loadCurrentLibraryDataAndApply('switch', { resetView: true });
   }
 
   const cardWidth = Math.round(200 * cardScale);
