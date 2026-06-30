@@ -901,15 +901,16 @@ select,
   display: flex;
   min-height: 0;
   justify-content: center;
+  padding: 2px 0;
 }
 
 .share-card-preview-canvas {
   display: block;
-  width: min(100%, 360px);
+  width: min(100%, 370px);
   height: auto;
-  border-radius: 18px;
-  background: #f7f8f4;
-  box-shadow: 0 24px 70px rgba(23, 32, 28, 0.18);
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: 0 24px 70px rgba(23, 32, 28, 0.22);
 }
 
 .dark .share-card-preview-canvas {

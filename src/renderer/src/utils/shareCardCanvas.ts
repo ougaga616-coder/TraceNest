@@ -5,14 +5,23 @@ export type ShareCardRenderData = {
   modelTags: string[];
 };
 
-const cardWidth = 1080;
-const cardHeight = 1440;
-const cardPadding = 64;
-const imageRadius = 34;
+const canvasWidth = 900;
+const minCanvasHeight = 1200;
+const cardInset = 18;
+const cardRadius = 30;
+const cardPadding = 48;
+const contentRadius = 16;
 
 type Point = {
   x: number;
   y: number;
+};
+
+type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -21,6 +30,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
       resolve(null);
       return;
     }
+
     const image = new Image();
     image.onload = () => resolve(image);
     image.onerror = () => resolve(null);
@@ -28,7 +38,8 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
+function roundedRect(ctx: CanvasRenderingContext2D, rect: Rect, radius: number): void {
+  const { x, y, width, height } = rect;
   const r = Math.min(radius, width / 2, height / 2);
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -39,160 +50,260 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width:
   ctx.closePath();
 }
 
-function drawContainedImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number, radius: number, background = '#eef1ec'): void {
+function fillPanel(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  roundedRect(ctx, rect, contentRadius);
+  ctx.fillStyle = '#f4f7f3';
+  ctx.fill();
+  ctx.strokeStyle = '#e1e8df';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawCoveredImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, rect: Rect, radius: number, background = '#eef1ec'): void {
   ctx.save();
-  roundedRect(ctx, x, y, width, height, radius);
+  roundedRect(ctx, rect, radius);
   ctx.fillStyle = background;
   ctx.fill();
   ctx.clip();
 
-  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+  const scale = Math.max(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
   const drawWidth = image.naturalWidth * scale;
   const drawHeight = image.naturalHeight * scale;
-  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.drawImage(image, rect.x + (rect.width - drawWidth) / 2, rect.y + (rect.height - drawHeight) / 2, drawWidth, drawHeight);
   ctx.restore();
 }
 
-function drawPlaceholder(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, text: string): void {
+function drawMainImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, rect: Rect): void {
   ctx.save();
-  roundedRect(ctx, x, y, width, height, imageRadius);
+  roundedRect(ctx, rect, contentRadius);
+  ctx.fillStyle = '#eef2ee';
+  ctx.fill();
+  ctx.clip();
+
+  const coverScale = Math.max(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
+  const coverWidth = image.naturalWidth * coverScale;
+  const coverHeight = image.naturalHeight * coverScale;
+  ctx.save();
+  ctx.globalAlpha = 0.24;
+  ctx.filter = 'blur(22px)';
+  ctx.drawImage(image, rect.x + (rect.width - coverWidth) / 2 - 18, rect.y + (rect.height - coverHeight) / 2 - 18, coverWidth + 36, coverHeight + 36);
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(247, 249, 246, 0.42)';
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+  const containScale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
+  const drawWidth = image.naturalWidth * containScale;
+  const drawHeight = image.naturalHeight * containScale;
+  ctx.drawImage(image, rect.x + (rect.width - drawWidth) / 2, rect.y + (rect.height - drawHeight) / 2, drawWidth, drawHeight);
+  ctx.restore();
+}
+
+function drawPlaceholder(ctx: CanvasRenderingContext2D, rect: Rect, text: string): void {
+  ctx.save();
+  roundedRect(ctx, rect, contentRadius);
   ctx.fillStyle = '#eef1ec';
   ctx.fill();
   ctx.strokeStyle = '#d8ddd7';
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.fillStyle = '#8a968d';
-  ctx.font = '500 34px sans-serif';
+  ctx.fillStyle = '#87938b';
+  ctx.font = '500 26px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + width / 2, y + height / 2);
+  ctx.fillText(text, rect.x + rect.width / 2, rect.y + rect.height / 2);
   ctx.restore();
 }
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
+function drawLabel(ctx: CanvasRenderingContext2D, label: string, x: number, y: number): void {
+  ctx.fillStyle = '#2f3a33';
+  ctx.font = '700 22px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(label, x, y);
+}
+
+function breakLongWord(ctx: CanvasRenderingContext2D, word: string, maxWidth: number): string[] {
+  const chunks: string[] = [];
+  let chunk = '';
+  for (const char of word) {
+    const nextChunk = chunk + char;
+    if (ctx.measureText(nextChunk).width <= maxWidth) {
+      chunk = nextChunk;
+      continue;
+    }
+    if (chunk) chunks.push(chunk);
+    chunk = char;
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const paragraphs = text.split(/\r?\n/);
   const lines: string[] = [];
 
   for (const paragraph of paragraphs) {
     const words = paragraph.trim().split(/\s+/).filter(Boolean);
     if (!words.length) {
-      if (lines.length < maxLines) lines.push('');
+      lines.push('');
       continue;
     }
 
     let line = '';
     for (const word of words) {
-      const nextLine = line ? `${line} ${word}` : word;
-      if (ctx.measureText(nextLine).width <= maxWidth) {
-        line = nextLine;
-        continue;
+      const wordParts = ctx.measureText(word).width > maxWidth ? breakLongWord(ctx, word, maxWidth) : [word];
+      for (const part of wordParts) {
+        const nextLine = line ? `${line} ${part}` : part;
+        if (ctx.measureText(nextLine).width <= maxWidth) {
+          line = nextLine;
+          continue;
+        }
+        if (line) lines.push(line);
+        line = part;
       }
-
-      if (line) lines.push(line);
-      line = word;
-      if (lines.length >= maxLines) break;
     }
-    if (line && lines.length < maxLines) lines.push(line);
-    if (lines.length >= maxLines) break;
+    if (line) lines.push(line);
   }
 
-  if (lines.length === maxLines && ctx.measureText(lines[maxLines - 1]).width > 0) {
-    lines[maxLines - 1] = `${lines[maxLines - 1].replace(/\s+\S*$/, '') || lines[maxLines - 1]}...`;
-  }
-  return lines.slice(0, maxLines);
+  return lines;
 }
 
 function drawTags(ctx: CanvasRenderingContext2D, tags: string[], start: Point, maxWidth: number): number {
   let x = start.x;
   let y = start.y;
-  const tagHeight = 48;
-  const gap = 12;
+  const tagHeight = 38;
+  const gap = 10;
 
-  ctx.font = '500 24px sans-serif';
-  for (const tag of tags) {
-    const text = tag.trim() || '未标注模型';
-    const width = Math.min(ctx.measureText(text).width + 32, maxWidth);
+  ctx.font = '600 19px sans-serif';
+  for (const tag of tags.slice(0, 8)) {
+    const text = tag.trim() || '\u672a\u6807\u6ce8\u6a21\u578b';
+    const width = Math.min(ctx.measureText(text).width + 28, maxWidth);
     if (x + width > start.x + maxWidth) {
       x = start.x;
       y += tagHeight + gap;
     }
 
-    roundedRect(ctx, x, y, width, tagHeight, 18);
-    ctx.fillStyle = '#eef1ec';
+    roundedRect(ctx, { x, y, width, height: tagHeight }, 14);
+    ctx.fillStyle = '#edf2ee';
     ctx.fill();
-    ctx.fillStyle = '#536257';
+    ctx.strokeStyle = '#dce5dd';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#46594f';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + 16, y + tagHeight / 2, width - 32);
+    ctx.fillText(text, x + 14, y + tagHeight / 2, width - 28);
     x += width + gap;
   }
 
   return y + tagHeight;
 }
 
-export async function renderShareCardToCanvas(canvas: HTMLCanvasElement, data: ShareCardRenderData): Promise<void> {
-  canvas.width = cardWidth;
-  canvas.height = cardHeight;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas unavailable');
-
-  ctx.fillStyle = '#f7f8f4';
-  ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-  ctx.fillStyle = '#dfe6df';
-  ctx.beginPath();
-  ctx.arc(910, 120, 170, 0, Math.PI * 2);
-  ctx.fill();
-
-  const mainImage = await loadImage(data.mainImageSrc);
-  const mainRect = { x: cardPadding, y: 64, width: cardWidth - cardPadding * 2, height: 650 };
-  if (mainImage) drawContainedImage(ctx, mainImage, mainRect.x, mainRect.y, mainRect.width, mainRect.height, imageRadius);
-  else drawPlaceholder(ctx, mainRect.x, mainRect.y, mainRect.width, mainRect.height, '主图暂不可用');
-
-  let cursorY = mainRect.y + mainRect.height + 34;
-  const referenceImages = (await Promise.all(data.referenceImageSrcs.slice(0, 6).map(loadImage))).filter(Boolean) as HTMLImageElement[];
-  if (referenceImages.length) {
-    ctx.fillStyle = '#68746b';
-    ctx.font = '600 24px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('垫图', cardPadding, cursorY);
-    cursorY += 38;
-
-    const thumbSize = 116;
-    const gap = 14;
-    referenceImages.forEach((image, index) => {
-      const x = cardPadding + index * (thumbSize + gap);
-      drawContainedImage(ctx, image, x, cursorY, thumbSize, thumbSize, 22, '#ffffff');
-    });
-    cursorY += thumbSize + 40;
-  }
-
-  ctx.fillStyle = '#303830';
-  ctx.font = '700 30px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText('Prompt', cardPadding, cursorY);
-  cursorY += 44;
-
-  const prompt = data.prompt.trim() || '暂无 Prompt';
-  ctx.fillStyle = '#4b554e';
-  ctx.font = '400 30px sans-serif';
-  const promptLines = wrapText(ctx, prompt, cardWidth - cardPadding * 2, 10);
-  const lineHeight = 43;
-  promptLines.forEach((line, index) => {
-    ctx.fillText(line, cardPadding, cursorY + index * lineHeight);
-  });
-
-  const footerY = cardHeight - 184;
-  const tags = data.modelTags.filter((tag) => tag.trim()) ;
-  drawTags(ctx, tags.length ? tags : ['未标注模型'], { x: cardPadding, y: footerY }, 650);
-
-  ctx.fillStyle = '#7a837c';
-  ctx.font = '600 28px sans-serif';
+function drawBrand(ctx: CanvasRenderingContext2D, cardRect: Rect): void {
+  ctx.fillStyle = '#a3ada6';
+  ctx.font = '400 17px sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText('PicFlow / by OMG Design Lab', cardWidth - cardPadding, cardHeight - 78);
+  ctx.fillText('PicFlow / by OMG Design Lab', cardRect.x + cardRect.width - cardPadding, cardRect.y + cardRect.height - 44);
+}
+
+export async function renderShareCardToCanvas(canvas: HTMLCanvasElement, data: ShareCardRenderData): Promise<void> {
+  canvas.width = canvasWidth;
+  canvas.height = minCanvasHeight;
+  let ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas unavailable');
+
+  const cardWidth = canvasWidth - cardInset * 2;
+  const contentWidth = cardWidth - cardPadding * 2;
+  const contentX = cardInset + cardPadding;
+  const prompt = data.prompt.trim() || '\u6682\u65e0 Prompt';
+
+  ctx.font = '400 22px sans-serif';
+  const promptLines = wrapText(ctx, prompt, contentWidth - 44);
+  const promptLineHeight = 38;
+  const promptBoxHeight = Math.max(96, promptLines.length * promptLineHeight + 52);
+
+  const hasReferences = data.referenceImageSrcs.length > 0;
+  const titleTop = cardInset + 46;
+  const mainTop = cardInset + 126;
+  const mainHeight = 410;
+  let measuredY = mainTop + mainHeight + 32;
+  if (hasReferences) measuredY += 34 + 92 + 32;
+  measuredY += 34 + promptBoxHeight + 36;
+  measuredY += 34 + 48 + 42;
+  const dynamicCanvasHeight = Math.max(minCanvasHeight, Math.ceil(measuredY + 58 + cardInset));
+
+  canvas.height = dynamicCanvasHeight;
+  ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas unavailable');
+  ctx.clearRect(0, 0, canvasWidth, dynamicCanvasHeight);
+
+  const cardRect = { x: cardInset, y: cardInset, width: cardWidth, height: dynamicCanvasHeight - cardInset * 2 };
+  ctx.save();
+  ctx.shadowColor = 'rgba(29, 45, 35, 0.18)';
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 14;
+  roundedRect(ctx, cardRect, cardRadius);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  roundedRect(ctx, cardRect, cardRadius);
+  ctx.clip();
+
+  ctx.fillStyle = '#354139';
+  ctx.font = '600 28px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('\u0041\u0049 \u89c6\u89c9\u751f\u6210\u5361', contentX, titleTop);
+
+  ctx.fillStyle = '#9aa59d';
+  ctx.font = '400 15px sans-serif';
+  ctx.fillText('AI Visual Prompt Card', contentX, titleTop + 34);
+
+  const mainRect = { x: contentX, y: mainTop, width: contentWidth, height: mainHeight };
+  const mainImage = await loadImage(data.mainImageSrc);
+  if (mainImage) drawMainImage(ctx, mainImage, mainRect);
+  else drawPlaceholder(ctx, mainRect, '\u4e3b\u56fe\u6682\u4e0d\u53ef\u7528');
+
+  let cursorY = mainRect.y + mainRect.height + 32;
+  const referenceImages = (await Promise.all(data.referenceImageSrcs.slice(0, 6).map(loadImage))).filter(Boolean) as HTMLImageElement[];
+  if (referenceImages.length) {
+    drawLabel(ctx, '\u57ab\u56fe', contentX, cursorY);
+    cursorY += 34;
+
+    const thumbSize = 64;
+    const gap = 12;
+    const referencePanel = { x: contentX, y: cursorY, width: contentWidth, height: 92 };
+    fillPanel(ctx, referencePanel);
+    referenceImages.forEach((image, index) => {
+      drawCoveredImage(ctx, image, { x: referencePanel.x + 18 + index * (thumbSize + gap), y: referencePanel.y + 14, width: thumbSize, height: thumbSize }, 12, '#f2f5f1');
+    });
+    cursorY += referencePanel.height + 32;
+  }
+
+  drawLabel(ctx, 'Prompt', contentX, cursorY);
+  cursorY += 34;
+  const promptBox = { x: contentX, y: cursorY, width: contentWidth, height: promptBoxHeight };
+  fillPanel(ctx, promptBox);
+  ctx.fillStyle = '#47544c';
+  ctx.font = '400 22px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  promptLines.forEach((line, index) => {
+    ctx.fillText(line, promptBox.x + 26, promptBox.y + 24 + index * promptLineHeight);
+  });
+
+  cursorY += promptBoxHeight + 36;
+  drawLabel(ctx, '\u6a21\u578b', contentX, cursorY);
+  cursorY += 34;
+  const tags = data.modelTags.filter((tag) => tag.trim());
+  drawTags(ctx, tags.length ? tags : ['\u672a\u6807\u6ce8\u6a21\u578b'], { x: contentX, y: cursorY }, contentWidth);
+
+  drawBrand(ctx, cardRect);
+  ctx.restore();
 }
 
 export function canvasToPngDataUrl(canvas: HTMLCanvasElement): string {
