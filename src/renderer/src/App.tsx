@@ -8,26 +8,21 @@ import {
   Inbox,
   Link,
   Database,
-  Minus,
-  Moon,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
-  RefreshCw,
-  Search,
-  Square,
-  Sun,
   Trash2,
   Upload,
   X
 } from 'lucide-react';
 import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { AppTitlebar } from './components/AppTitlebar';
 import { PostImportInfoModal, type PostImportInfoPayload } from './components/PostImportInfoModal';
+import { Toast } from './components/Toast';
 import type { PicFlowCase, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
-import { imageDisplaySrc } from './utils/imageDisplay';
-import { formatModelTagsForCopy, formatWorkSummaryForCopy } from './utils/workCopy';
-import { matchesWorkSearch } from './utils/workSearch';
+import { resolveWorkImageSrc } from './utils/imageDisplay';
+import { buildWorkSummaryText, copyTextToClipboard, formatModelTagsForCopy } from './utils/workCopy';
+import { filterWorksByQuery } from './utils/workSearch';
+import { updateWork } from './utils/workUpdates';
 
 type ViewKey = 'all' | 'pending' | 'favorites' | `collection:${string}`;
 type ConfirmState =
@@ -153,7 +148,7 @@ function createCase(partial: Partial<PicFlowCase> = {}): PicFlowCase {
 }
 
 function imageSrc(image?: PicFlowImage, libraryPath?: string): string {
-  return imageDisplaySrc(image, libraryPath);
+  return resolveWorkImageSrc(image, libraryPath);
 }
 
 function coverImage(item: PicFlowCase): PicFlowImage | undefined {
@@ -357,7 +352,7 @@ export default function App(): JSX.Element {
       const collectionId = activeView.replace('collection:', '');
       scoped = scoped.filter((item) => item.collectionId === collectionId);
     }
-    if (search.trim()) return scoped.filter((item) => matchesWorkSearch(item, search));
+    if (search.trim()) return filterWorksByQuery(scoped, search);
     return scoped;
   }, [activeView, data.cases, search]);
 
@@ -465,7 +460,7 @@ export default function App(): JSX.Element {
   function updateCase(id: string, patch: Partial<PicFlowCase>): void {
     setData((current) => ({
       ...current,
-      cases: current.cases.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: nowIso() } : item))
+      cases: updateWork(current.cases, id, patch, nowIso())
     }));
   }
 
@@ -737,7 +732,7 @@ export default function App(): JSX.Element {
       else setToast(`${label}\u4e3a\u7a7a`);
       return;
     }
-    void navigator.clipboard.writeText(text).then(() => setToast(`\u5df2\u590d\u5236${label}`)).catch(() => setToast('\u590d\u5236\u5931\u8d25'));
+    void copyTextToClipboard(text).then(() => setToast(`\u5df2\u590d\u5236${label}`)).catch(() => setToast('\u590d\u5236\u5931\u8d25'));
   }
 
   async function copyImage(image?: PicFlowImage, label = '\u56fe\u7247'): Promise<void> {
@@ -758,8 +753,8 @@ export default function App(): JSX.Element {
   }
 
   function copyWorkSummary(item: PicFlowCase): void {
-    const summary = formatWorkSummaryForCopy(item);
-    void navigator.clipboard.writeText(summary).then(() => setToast('\u5df2\u590d\u5236\u4f5c\u54c1\u4fe1\u606f')).catch(() => setToast('\u590d\u5236\u5931\u8d25'));
+    const summary = buildWorkSummaryText(item);
+    void copyTextToClipboard(summary).then(() => setToast('\u5df2\u590d\u5236\u4f5c\u54c1\u4fe1\u606f')).catch(() => setToast('\u590d\u5236\u5931\u8d25'));
   }
 
   function toggleFavorite(id: string): void {
@@ -1032,63 +1027,21 @@ export default function App(): JSX.Element {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => event.preventDefault()}
     >
-      <header className="app-titlebar">
-        <div className="titlebar-brand">
-          <span className="titlebar-brand-name">图迹</span>
-          <span className="titlebar-separator">/</span>
-          <span className="titlebar-current-view">{search.trim() ? '搜索结果' : viewTitle(activeView, data.collections)}</span>
-        </div>
-
-        <label className="titlebar-search">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 dark:text-neutral-500" />
-          <input
-            className="smart-search-input"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            onKeyDown={handleSmartInputKeyDown}
-            placeholder="搜索作品 / 粘贴图片链接"
-          />
-        </label>
-
-        <div className="titlebar-actions">
-          <button
-            className="toolbar-icon-button"
-            onClick={() => setSidePanelsCollapsed((value) => !value)}
-            aria-label={sidePanelsCollapsed ? '显示侧栏' : '隐藏侧栏'}
-            title={sidePanelsCollapsed ? '显示侧栏' : '隐藏侧栏'}
-          >
-            {sidePanelsCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </button>
-
-          <div data-library-menu="true">
-            <button
-              ref={libraryButtonRef}
-              className="toolbar-icon-button"
-              onClick={toggleLibraryMenu}
-              aria-label="资源库"
-              title="资源库"
-            >
-              <Database className="h-4 w-4" />
-            </button>
-          </div>
-
-          <button
-            className="toolbar-icon-button"
-            onClick={() => void refreshCurrentLibrary()}
-            disabled={libraryRefreshing}
-            aria-label="刷新当前资源库"
-            title="刷新当前资源库"
-          >
-            <RefreshCw className={`h-4 w-4 ${libraryRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button className="toolbar-icon-button" onClick={() => setDarkMode((value) => !value)} aria-label="切换浅色深色模式" title="切换浅色 / 深色模式">
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-        </div>
-
-        <WindowControls />
-      </header>
+      <AppTitlebar
+        currentViewTitle={search.trim() ? '\u641c\u7d22\u7ed3\u679c' : viewTitle(activeView, data.collections)}
+        search={search}
+        sidePanelsCollapsed={sidePanelsCollapsed}
+        darkMode={darkMode}
+        libraryRefreshing={libraryRefreshing}
+        libraryButtonRef={libraryButtonRef}
+        windowApi={picflowWindow}
+        onSearchChange={setSearch}
+        onSearchKeyDown={handleSmartInputKeyDown}
+        onToggleSidePanels={() => setSidePanelsCollapsed((value) => !value)}
+        onToggleLibraryMenu={toggleLibraryMenu}
+        onRefreshLibrary={() => void refreshCurrentLibrary()}
+        onToggleDarkMode={() => setDarkMode((value) => !value)}
+      />
 
       <main
         className="grid min-h-0 flex-1"
@@ -1321,7 +1274,7 @@ export default function App(): JSX.Element {
         />
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      <Toast message={toast} />
 
       {confirmState && <ConfirmDialog state={confirmState} onCancel={() => setConfirmState(null)} onConfirm={deleteConfirmed} />}
     </div>
@@ -1340,22 +1293,6 @@ function BrandHeader(): JSX.Element {
       </div>
       <div className="brand-description">AIGC 视觉灵感库</div>
       <div className="brand-studio">by OMG Design Lab</div>
-    </div>
-  );
-}
-
-function WindowControls(): JSX.Element {
-  return (
-    <div className="window-controls" aria-label="窗口控制">
-      <button className="window-control-button" onClick={() => void picflowWindow.minimize()} aria-label="最小化" title="最小化">
-        <Minus className="h-4 w-4" />
-      </button>
-      <button className="window-control-button" onClick={() => void picflowWindow.toggleMaximize()} aria-label="最大化或还原" title="最大化 / 还原">
-        <Square className="h-3.5 w-3.5" />
-      </button>
-      <button className="window-control-button is-close" onClick={() => void picflowWindow.close()} aria-label="关闭" title="关闭">
-        <X className="h-4 w-4" />
-      </button>
     </div>
   );
 }

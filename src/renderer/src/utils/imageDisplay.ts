@@ -41,3 +41,6 @@ export function imageDisplaySrc(image?: PicFlowImage, libraryPath?: string): str
 
   return src;
 }
+
+export const resolveWorkImageSrc = imageDisplaySrc;
+export const resolveReferenceImageSrc = imageDisplaySrc;

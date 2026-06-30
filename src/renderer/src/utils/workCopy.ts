@@ -19,3 +19,8 @@ export function formatWorkSummaryForCopy(work: PicFlowCase): string {
   return lines.filter((line, index) => line !== '' || lines[index - 1] !== '').join('\n').trim();
 }
 
+export const buildWorkSummaryText = formatWorkSummaryForCopy;
+
+export function copyTextToClipboard(text: string): Promise<void> {
+  return navigator.clipboard.writeText(text);
+}
