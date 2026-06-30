@@ -76,6 +76,29 @@ type PicFlowData = {
   };
 };
 
+type PicFlowTraceNode = {
+  id: string;
+  type: 'center';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title: string;
+};
+
+type PicFlowTrace = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  nodes: PicFlowTraceNode[];
+  edges: Record<string, never>[];
+};
+
+type PicFlowTraceData = {
+  traces: PicFlowTrace[];
+};
+
 type PicFlowLibraryActionResult = {
   ok: boolean;
   message: string;
@@ -181,6 +204,10 @@ function settingsPath(root: string): string {
   return join(root, 'data', 'settings.json');
 }
 
+function tracesPath(root: string): string {
+  return join(root, 'data', 'traces.json');
+}
+
 function assetsDir(root: string): string {
   return join(root, 'assets');
 }
@@ -260,6 +287,18 @@ function normalizeData(data: Partial<PicFlowData>): PicFlowData {
   };
 }
 
+function normalizeTraceData(data: Partial<PicFlowTraceData>): PicFlowTraceData {
+  return {
+    traces: Array.isArray(data.traces)
+      ? data.traces.map((trace) => ({
+          ...trace,
+          nodes: Array.isArray(trace.nodes) ? trace.nodes : [],
+          edges: Array.isArray(trace.edges) ? trace.edges : []
+        }))
+      : []
+  };
+}
+
 function isExternalImagePath(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('data:');
 }
@@ -317,6 +356,7 @@ function ensureLibraryStructure(root: string, name = libraryNameFromPath(root), 
   if (!existsSync(worksPath(root))) writeJson(worksPath(root), seed?.cases ?? []);
   if (!existsSync(collectionsPath(root))) writeJson(collectionsPath(root), seed?.collections ?? []);
   if (!existsSync(settingsPath(root))) writeJson(settingsPath(root), { ...defaultSettings(), ...seed?.settings });
+  if (!existsSync(tracesPath(root))) writeJson(tracesPath(root), { traces: [] });
 
   const manifest = readManifest(root);
   return {
@@ -442,6 +482,22 @@ function writeData(data: PicFlowData): PicFlowData {
   writeJson(worksPath(libraryPath), normalized.cases);
   writeJson(collectionsPath(libraryPath), normalized.collections);
   writeJson(settingsPath(libraryPath), normalized.settings ?? defaultSettings());
+  return normalized;
+}
+
+function readTraceData(): PicFlowTraceData {
+  const libraryPath = currentLibraryPathOrThrow();
+  ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath));
+  const data = normalizeTraceData(readJson<PicFlowTraceData>(tracesPath(libraryPath), { traces: [] }));
+  if (!existsSync(tracesPath(libraryPath))) writeJson(tracesPath(libraryPath), data);
+  return data;
+}
+
+function writeTraceData(data: PicFlowTraceData): PicFlowTraceData {
+  const libraryPath = currentLibraryPathOrThrow();
+  ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath));
+  const normalized = normalizeTraceData(data);
+  writeJson(tracesPath(libraryPath), normalized);
   return normalized;
 }
 
@@ -711,6 +767,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('picflow:load-data', () => readData());
   ipcMain.handle('picflow:save-data', (_event, data: PicFlowData) => writeData(data));
+  ipcMain.handle('picflow:load-traces', () => readTraceData());
+  ipcMain.handle('picflow:save-traces', (_event, data: PicFlowTraceData) => writeTraceData(data));
   ipcMain.handle('picflow:get-storage-info', () => {
     const libraryPath = getCurrentLibraryPath();
     return {

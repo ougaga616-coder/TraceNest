@@ -56,6 +56,29 @@ export type PicFlowData = {
   };
 };
 
+export type PicFlowTraceNode = {
+  id: string;
+  type: 'center';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title: string;
+};
+
+export type PicFlowTrace = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  nodes: PicFlowTraceNode[];
+  edges: Record<string, never>[];
+};
+
+export type PicFlowTraceData = {
+  traces: PicFlowTrace[];
+};
+
 export type StorageInfo = {
   dataPath: string;
   imageDir: string;
@@ -66,6 +89,8 @@ export type PicFlowLibraryImageTarget = 'asset' | 'reference';
 export type PicFlowApi = {
   loadData: () => Promise<PicFlowData>;
   saveData: (data: PicFlowData) => Promise<PicFlowData>;
+  loadTraces: () => Promise<PicFlowTraceData>;
+  saveTraces: (data: PicFlowTraceData) => Promise<PicFlowTraceData>;
   getStorageInfo: () => Promise<StorageInfo>;
   selectImages: (target?: PicFlowLibraryImageTarget) => Promise<PicFlowImage[]>;
   getPathForFile?: (file: File) => string;

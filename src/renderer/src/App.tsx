@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Copy,
   Folder,
+  GitBranch,
   Heart,
   ImagePlus,
   Inbox,
@@ -20,6 +21,10 @@ import { ClipboardPromptConfirm } from './components/ClipboardPromptConfirm';
 import { PostImportInfoModal, type PostImportInfoPayload } from './components/PostImportInfoModal';
 import { ShareCardModal } from './components/ShareCardModal';
 import { Toast } from './components/Toast';
+import { TraceCanvas } from './features/traces/TraceCanvas';
+import { TraceList } from './features/traces/TraceList';
+import { fallbackTraceApi } from './features/traces/traceStorage';
+import { createTrace, emptyTraceData, renameTrace, type CreativeTrace, type TraceData } from './features/traces/traceTypes';
 import { useSmartClipboard } from './hooks/useSmartClipboard';
 import type { PicFlowCase, PicFlowClipboardApi, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
 import { resolveWorkImageSrc } from './utils/imageDisplay';
@@ -27,10 +32,11 @@ import { buildWorkSummaryText, copyTextToClipboard, formatModelTagsForCopy } fro
 import { filterWorksByQuery } from './utils/workSearch';
 import { updateWork } from './utils/workUpdates';
 
-type ViewKey = 'all' | 'pending' | 'favorites' | `collection:${string}`;
+type ViewKey = 'all' | 'pending' | 'favorites' | 'traces' | `collection:${string}`;
 type ConfirmState =
   | { type: 'case'; id: string; title: string }
   | { type: 'collection'; id: string; name: string }
+  | { type: 'trace'; id: string; title: string }
   | { type: 'clear-guides'; caseId: string; title: string }
   | { type: 'replace-main'; caseId: string; images: PicFlowImage[] }
   | { type: 'move-work'; workId: string; fromCollectionName: string; toCollectionId?: string; toCollectionName: string }
@@ -52,6 +58,8 @@ const picflowApi = window.picflow ?? {
     localStorage.setItem('picflow-browser-preview', JSON.stringify(data));
     return data;
   },
+  loadTraces: fallbackTraceApi.loadTraces,
+  saveTraces: fallbackTraceApi.saveTraces,
   getStorageInfo: async () => ({ dataPath: 'Electron 模式下保存到 LOCALAPPDATA', imageDir: 'Electron 模式下保存图片' }),
   selectImages: async () => [],
   getPathForFile: () => '',
@@ -199,6 +207,7 @@ function viewTitle(view: ViewKey, collections: PicFlowCollection[]): string {
   if (view === 'all') return '全部作品';
   if (view === 'pending') return '\u5f85\u6574\u7406';
   if (view === 'favorites') return '我的收藏';
+  if (view === 'traces') return '创作复迹';
   const collection = collections.find((item) => item.id === view.replace('collection:', ''));
   return collection?.name ?? '灵感图集';
 }
@@ -231,6 +240,10 @@ function nextAfterDelete(cases: PicFlowCase[], deletedId: string): string | null
 
 export default function App(): JSX.Element {
   const [data, setData] = useState<PicFlowData>(emptyData);
+  const [traceData, setTraceData] = useState<TraceData>(emptyTraceData);
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [editingTraceId, setEditingTraceId] = useState<string | null>(null);
+  const [editingTraceTitle, setEditingTraceTitle] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>('all');
   const [search, setSearch] = useState('');
@@ -293,6 +306,16 @@ export default function App(): JSX.Element {
   }, [data, loaded, libraryState.ready]);
 
   useEffect(() => {
+    if (!loaded) return;
+    if (!libraryState.ready) return;
+    if (suppressSaveRef.current) return;
+    const timer = window.setTimeout(() => {
+      void picflowApi.saveTraces(traceData);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [traceData, loaded, libraryState.ready]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(''), 2200);
     return () => window.clearTimeout(timer);
@@ -301,6 +324,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onPaste = async (event: globalThis.ClipboardEvent) => {
       if (isTextEditingTarget(event.target)) return;
+      if (activeView === 'traces') return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('[data-guide-dropzone="true"]')) return;
       if (postImportCaseId) return;
@@ -407,6 +431,7 @@ export default function App(): JSX.Element {
       return true;
     });
   }, [libraryState.currentLibrary?.path, libraryState.recentLibraries]);
+  const selectedTrace = selectedTraceId ? traceData.traces.find((trace) => trace.id === selectedTraceId) ?? null : null;
 
   function isTextEditingTarget(target: EventTarget | null): boolean {
     const element = target as HTMLElement | null;
@@ -449,6 +474,8 @@ export default function App(): JSX.Element {
       if (!result.state.ready) {
         suppressSaveRef.current = true;
         setData(emptyData);
+        setTraceData(emptyTraceData);
+        setSelectedTraceId(null);
         setSelectedId(null);
         window.setTimeout(() => {
           suppressSaveRef.current = false;
@@ -461,7 +488,9 @@ export default function App(): JSX.Element {
     if (reason === 'refresh') console.info('[library refresh] applying state...');
     suppressSaveRef.current = true;
     const nextData = result.data;
+    const nextTraceData = await picflowApi.loadTraces();
     setData(nextData);
+    setTraceData(nextTraceData);
     setDarkMode(nextData.settings?.theme === 'dark');
     setCardScale(nextData.settings?.cardScale ?? 1.12);
     setSelectedId((current) => {
@@ -471,6 +500,7 @@ export default function App(): JSX.Element {
     if (options.resetView !== false) {
       setActiveView('all');
       setSearch('');
+      setSelectedTraceId(null);
     } else {
       setActiveView((current) => {
         if (!current.startsWith('collection:')) return current;
@@ -490,6 +520,55 @@ export default function App(): JSX.Element {
   function persist(nextData: PicFlowData): void {
     setData(nextData);
     void picflowApi.saveData(nextData);
+  }
+
+  function persistTraces(nextData: TraceData): void {
+    setTraceData(nextData);
+    void picflowApi.saveTraces(nextData);
+  }
+
+  function openTraceModule(): void {
+    setActiveView('traces');
+    setSearch('');
+    setSelectedId(null);
+  }
+
+  function createNewTrace(): void {
+    if (!ensureLibraryReady()) return;
+    const trace = createTrace();
+    const nextData = { traces: [trace, ...traceData.traces] };
+    persistTraces(nextData);
+    setSelectedTraceId(trace.id);
+    setActiveView('traces');
+    setToast('已新建创作复迹');
+  }
+
+  function openTrace(id: string): void {
+    setSelectedTraceId(id);
+  }
+
+  function backToTraceList(): void {
+    setSelectedTraceId(null);
+  }
+
+  function startRenameTrace(trace: CreativeTrace): void {
+    setEditingTraceId(trace.id);
+    setEditingTraceTitle(trace.title);
+  }
+
+  function finishRenameTrace(id: string): void {
+    const nextData = {
+      traces: traceData.traces.map((trace) => (trace.id === id ? renameTrace(trace, editingTraceTitle) : trace))
+    };
+    persistTraces(nextData);
+    setEditingTraceId(null);
+    setEditingTraceTitle('');
+    setToast('已重命名复迹');
+  }
+
+  function cancelRenameTrace(): void {
+    setEditingTraceId(null);
+    setEditingTraceTitle('');
   }
 
   function updateCase(id: string, patch: Partial<PicFlowCase>): void {
@@ -954,6 +1033,12 @@ export default function App(): JSX.Element {
       if (activeView === `collection:${confirmState.id}`) setActiveView('all');
       setToast('已删除图集，作品已回到未分类');
     }
+    if (confirmState.type === 'trace') {
+      const nextData = { traces: traceData.traces.filter((trace) => trace.id !== confirmState.id) };
+      persistTraces(nextData);
+      if (selectedTraceId === confirmState.id) setSelectedTraceId(null);
+      setToast('已删除复迹');
+    }
     if (confirmState.type === 'clear-guides') {
       clearGuideImages(confirmState.caseId);
     }
@@ -970,6 +1055,8 @@ export default function App(): JSX.Element {
       if (result.state) setLibraryState(result.state);
       if (result.ok) {
         setData(emptyData);
+        setTraceData(emptyTraceData);
+        setSelectedTraceId(null);
         setSelectedId(null);
       }
     }
@@ -1070,6 +1157,8 @@ export default function App(): JSX.Element {
   const cardGap = Math.round(18 * cardScale);
   const getImageDisplaySrc = (image?: PicFlowImage) => imageSrc(image, libraryState.currentLibrary?.path);
   const getReferenceImageDisplaySrc = (image?: PicFlowImage) => imageSrc(image, libraryState.currentLibrary?.path);
+  const isTraceModule = activeView === 'traces';
+  const currentViewTitle = isTraceModule ? '创作复迹' : search.trim() ? '\u641c\u7d22\u7ed3\u679c' : viewTitle(activeView, data.collections);
 
   return (
     <div
@@ -1078,7 +1167,7 @@ export default function App(): JSX.Element {
       onDrop={(event) => event.preventDefault()}
     >
       <AppTitlebar
-        currentViewTitle={search.trim() ? '\u641c\u7d22\u7ed3\u679c' : viewTitle(activeView, data.collections)}
+        currentViewTitle={currentViewTitle}
         search={search}
         sidePanelsCollapsed={sidePanelsCollapsed}
         darkMode={darkMode}
@@ -1095,7 +1184,7 @@ export default function App(): JSX.Element {
 
       <main
         className="grid min-h-0 flex-1"
-        style={{ gridTemplateColumns: sidePanelsCollapsed ? 'minmax(620px, 1fr)' : '260px minmax(620px, 1fr) 400px' }}
+        style={{ gridTemplateColumns: sidePanelsCollapsed ? 'minmax(620px, 1fr)' : isTraceModule ? '260px minmax(620px, 1fr)' : '260px minmax(620px, 1fr) 400px' }}
       >
         {!sidePanelsCollapsed && (
         <aside className="flex min-h-0 flex-col bg-[#f4f5f2] dark:bg-[#2b2b2b]">
@@ -1154,10 +1243,34 @@ export default function App(): JSX.Element {
               })}
             </div>
           </div>
+
+          <div className="mt-6 border-t border-[#dde2dc] pt-5 dark:border-[#3b3b3b]">
+            <nav className="space-y-1.5">
+              <SidebarRow active={activeView === 'traces'} icon={<GitBranch />} label="创作复迹" count={traceData.traces.length} onClick={openTraceModule} />
+            </nav>
+          </div>
           </div>
         </aside>
         )}
 
+        {isTraceModule ? (
+          selectedTrace ? (
+            <TraceCanvas trace={selectedTrace} onBack={backToTraceList} />
+          ) : (
+            <TraceList
+              traces={traceData.traces}
+              editingTraceId={editingTraceId}
+              editingTitle={editingTraceTitle}
+              onCreateTrace={createNewTrace}
+              onOpenTrace={openTrace}
+              onStartRename={startRenameTrace}
+              onEditingTitleChange={setEditingTraceTitle}
+              onFinishRename={finishRenameTrace}
+              onCancelRename={cancelRenameTrace}
+              onDeleteTrace={(trace) => setConfirmState({ type: 'trace', id: trace.id, title: trace.title })}
+            />
+          )
+        ) : (
         <section
           className={`min-h-0 overflow-y-auto bg-[#e6eae5] px-7 py-6 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#e1e6f3] dark:bg-[#2d2b33]' : ''}`}
           onWheel={handleGalleryWheel}
@@ -1228,8 +1341,9 @@ export default function App(): JSX.Element {
             </div>
           )}
         </section>
+        )}
 
-        {!sidePanelsCollapsed && (
+        {!sidePanelsCollapsed && !isTraceModule && (
         <div className="min-h-0 bg-[#e1e6df] p-4 pl-2 dark:bg-[#282828]">
         <DetailPanel
           item={visibleSelectedCase}
@@ -1915,6 +2029,31 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
       </div>
     );
   }
+  if (state.type === 'trace') {
+    return (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
+        <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold">确认删除复迹？</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-600 dark:text-neutral-300">删除后该复迹会从当前资源库的 traces.json 中移除，不会影响作品库。</p>
+            </div>
+            <button className="flex h-9 w-9 items-center justify-center rounded-[10px] text-stone-500 hover:bg-stone-100 dark:text-neutral-400 dark:hover:bg-neutral-800" onClick={onCancel} aria-label="关闭">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button className="tool-button" onClick={onCancel}>取消</button>
+            <button className="danger-button" onClick={() => void onConfirm()}>
+              <Trash2 className="h-4 w-4" />
+              删除
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isCollection = state.type === 'collection';
   const isClearGuides = state.type === 'clear-guides';
   const isReplaceMain = state.type === 'replace-main';

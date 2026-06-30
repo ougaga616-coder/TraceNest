@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 contextBridge.exposeInMainWorld('picflow', {
   loadData: () => ipcRenderer.invoke('picflow:load-data'),
   saveData: (data: unknown) => ipcRenderer.invoke('picflow:save-data', data),
+  loadTraces: () => ipcRenderer.invoke('picflow:load-traces'),
+  saveTraces: (data: unknown) => ipcRenderer.invoke('picflow:save-traces', data),
   getStorageInfo: () => ipcRenderer.invoke('picflow:get-storage-info'),
   selectImages: (target?: 'asset' | 'reference') => ipcRenderer.invoke('picflow:select-images', target),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),

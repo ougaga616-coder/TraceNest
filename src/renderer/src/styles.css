@@ -280,6 +280,17 @@ select,
   color: rgba(255, 255, 255, 0.88);
 }
 
+.trace-canvas-grid {
+  background-color: #edf0ec;
+  background-image: radial-gradient(circle, rgba(100, 105, 98, 0.24) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.dark .trace-canvas-grid {
+  background-color: #272727;
+  background-image: radial-gradient(circle, rgba(214, 214, 214, 0.18) 1px, transparent 1px);
+}
+
 .library-menu {
   position: fixed;
   z-index: 9999;
