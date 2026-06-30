@@ -16,10 +16,12 @@ import {
 } from 'lucide-react';
 import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AppTitlebar } from './components/AppTitlebar';
+import { ClipboardPromptConfirm } from './components/ClipboardPromptConfirm';
 import { PostImportInfoModal, type PostImportInfoPayload } from './components/PostImportInfoModal';
 import { ShareCardModal } from './components/ShareCardModal';
 import { Toast } from './components/Toast';
-import type { PicFlowCase, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
+import { useSmartClipboard } from './hooks/useSmartClipboard';
+import type { PicFlowCase, PicFlowClipboardApi, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
 import { resolveWorkImageSrc } from './utils/imageDisplay';
 import { buildWorkSummaryText, copyTextToClipboard, formatModelTagsForCopy } from './utils/workCopy';
 import { filterWorksByQuery } from './utils/workSearch';
@@ -35,7 +37,7 @@ type ConfirmState =
   | { type: 'reset-test-data' }
   | null;
 
-const emptyData: PicFlowData = { version: 1, cases: [], collections: [], settings: { theme: 'light', cardScale: 1.12 } };
+const emptyData: PicFlowData = { version: 1, cases: [], collections: [], settings: { theme: 'light', cardScale: 1.12, smartClipboardEnabled: true } };
 const modelPresets = ['Nano banana', 'Nano banana Pro', 'GPT Image', 'Midjourney', 'Stable Diffusion', '即梦', '可灵', 'Libli'];
 const minCardScale = 0.78;
 const maxCardScale = 1.45;
@@ -100,6 +102,14 @@ const picflowWindow = window.picflowWindow ?? {
   toggleMaximize: async () => undefined,
   close: async () => undefined
 };
+
+const picflowClipboard: PicFlowClipboardApi | undefined = window.picflowClipboard ?? (
+  navigator.clipboard
+    ? {
+        readText: () => navigator.clipboard.readText()
+      }
+    : undefined
+);
 
 const fallbackPicflowLibrary: PicFlowLibraryApi = {
   loadCurrentData: async () => {
@@ -233,6 +243,7 @@ export default function App(): JSX.Element {
   const [modelOpen, setModelOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [cardScale, setCardScale] = useState(1.12);
+  const [smartClipboardEnabled, setSmartClipboardEnabled] = useState(true);
   const [galleryDragging, setGalleryDragging] = useState(false);
   const [sidePanelsCollapsed, setSidePanelsCollapsed] = useState(() => localStorage.getItem('picflow.sidePanelsCollapsed') === 'true');
   const [libraryMenuOpen, setLibraryMenuOpen] = useState(false);
@@ -259,6 +270,11 @@ export default function App(): JSX.Element {
     if (!loaded) return;
     setData((current) => ({ ...current, settings: { ...current.settings, cardScale } }));
   }, [cardScale]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    setData((current) => ({ ...current, settings: { ...current.settings, smartClipboardEnabled } }));
+  }, [smartClipboardEnabled]);
 
   useEffect(() => {
     localStorage.setItem('picflow.sidePanelsCollapsed', String(sidePanelsCollapsed));
@@ -317,6 +333,14 @@ export default function App(): JSX.Element {
   }, [activeView, cutWorkId, data.cases, data.collections, libraryState.ready, postImportCaseId]);
 
   const selectedCase = data.cases.find((item) => item.id === selectedId) ?? null;
+  const smartClipboard = useSmartClipboard({
+    enabled: smartClipboardEnabled && libraryState.ready,
+    selectedWork: selectedCase,
+    modalOpen: Boolean(confirmState || postImportCaseId || shareCardCaseId || libraryMenuOpen),
+    movingWork: Boolean(cutWorkId),
+    clipboardApi: picflowClipboard,
+    onReadError: () => setToast('\u65e0\u6cd5\u8bfb\u53d6\u526a\u8d34\u677f')
+  });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -446,6 +470,7 @@ export default function App(): JSX.Element {
     setData(nextData);
     setDarkMode(nextData.settings?.theme === 'dark');
     setCardScale(nextData.settings?.cardScale ?? 1.12);
+    setSmartClipboardEnabled(nextData.settings?.smartClipboardEnabled ?? true);
     setSelectedId((current) => {
       if (options.keepSelection && current && nextData.cases.some((item) => item.id === current)) return current;
       return null;
@@ -479,6 +504,20 @@ export default function App(): JSX.Element {
       ...current,
       cases: updateWork(current.cases, id, patch, nowIso())
     }));
+  }
+
+  function fillPromptFromSmartClipboard(): void {
+    const request = smartClipboard.completeRequest();
+    if (!request) return;
+    setData((current) => {
+      const nextData = {
+        ...current,
+        cases: updateWork(current.cases, request.workId, { prompt: request.text }, nowIso())
+      };
+      void picflowApi.saveData(nextData);
+      return nextData;
+    });
+    setToast('\u5df2\u586b\u5165 Prompt');
   }
 
   function appendWork(item: PicFlowCase, options: { openPostImportModal?: boolean } = {}): void {
@@ -1050,6 +1089,7 @@ export default function App(): JSX.Element {
         search={search}
         sidePanelsCollapsed={sidePanelsCollapsed}
         darkMode={darkMode}
+        smartClipboardEnabled={smartClipboardEnabled}
         libraryRefreshing={libraryRefreshing}
         libraryButtonRef={libraryButtonRef}
         windowApi={picflowWindow}
@@ -1059,6 +1099,7 @@ export default function App(): JSX.Element {
         onToggleLibraryMenu={toggleLibraryMenu}
         onRefreshLibrary={() => void refreshCurrentLibrary()}
         onToggleDarkMode={() => setDarkMode((value) => !value)}
+        onToggleSmartClipboard={() => setSmartClipboardEnabled((value) => !value)}
       />
 
       <main
@@ -1128,6 +1169,7 @@ export default function App(): JSX.Element {
 
         <section
           className={`min-h-0 overflow-y-auto bg-[#e6eae5] px-7 py-6 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#e1e6f3] dark:bg-[#2d2b33]' : ''}`}
+          data-smart-clipboard-safe="true"
           onWheel={handleGalleryWheel}
           onDragEnter={(event) => {
             if (isWorkCardDrag(event)) return;
@@ -1198,7 +1240,7 @@ export default function App(): JSX.Element {
         </section>
 
         {!sidePanelsCollapsed && (
-        <div className="min-h-0 bg-[#e1e6df] p-4 pl-2 dark:bg-[#282828]">
+        <div className="min-h-0 bg-[#e1e6df] p-4 pl-2 dark:bg-[#282828]" data-smart-clipboard-safe="true">
         <DetailPanel
           item={visibleSelectedCase}
           collections={data.collections}
@@ -1305,6 +1347,14 @@ export default function App(): JSX.Element {
       )}
 
       <Toast message={toast} />
+
+      {smartClipboard.request && (
+        <ClipboardPromptConfirm
+          request={smartClipboard.request}
+          onCancel={smartClipboard.dismissRequest}
+          onConfirm={fillPromptFromSmartClipboard}
+        />
+      )}
 
       {confirmState && <ConfirmDialog state={confirmState} onCancel={() => setConfirmState(null)} onConfirm={deleteConfirmed} />}
     </div>
@@ -1464,6 +1514,7 @@ function CaseCard({
         selected ? 'border-[#8faf9b] ring-2 ring-[#8faf9b]/20 dark:border-[#afc7b6] dark:ring-[#afc7b6]/20' : 'border-[#d8ddd7] dark:border-[#444]'
       } ${selected ? 'is-selected' : ''}`}
       style={{ height: cardHeight }}
+      data-smart-clipboard-block="true"
       draggable
       onDragStart={onDragStart}
     >
@@ -1522,6 +1573,7 @@ function PendingCard({
     <article
       className={`group relative overflow-hidden rounded-[18px] border bg-[#fbfbfa] shadow-[0_10px_28px_rgba(23,32,28,0.055)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(23,32,28,0.09)] dark:bg-[#303030] ${selected ? 'is-selected border-[#8faf9b] ring-2 ring-[#8faf9b]/20 dark:border-[#afc7b6] dark:ring-[#afc7b6]/20' : 'border-[#d8ddd7] dark:border-[#444]'}`}
       style={{ height: cardHeight }}
+      data-smart-clipboard-block="true"
       draggable
       onDragStart={onDragStart}
     >

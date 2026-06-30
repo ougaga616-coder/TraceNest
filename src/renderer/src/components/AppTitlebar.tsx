@@ -1,5 +1,5 @@
 import { RefObject, KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Database, Minus, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Square, Sun, X } from 'lucide-react';
+import { ClipboardCheck, Database, Minus, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Square, Sun, X } from 'lucide-react';
 import type { PicFlowWindowApi } from '../types';
 
 type AppTitlebarProps = {
@@ -7,6 +7,7 @@ type AppTitlebarProps = {
   search: string;
   sidePanelsCollapsed: boolean;
   darkMode: boolean;
+  smartClipboardEnabled: boolean;
   libraryRefreshing: boolean;
   libraryButtonRef: RefObject<HTMLButtonElement>;
   windowApi: PicFlowWindowApi;
@@ -16,6 +17,7 @@ type AppTitlebarProps = {
   onToggleLibraryMenu: () => void;
   onRefreshLibrary: () => void;
   onToggleDarkMode: () => void;
+  onToggleSmartClipboard: () => void;
 };
 
 export function AppTitlebar({
@@ -23,6 +25,7 @@ export function AppTitlebar({
   search,
   sidePanelsCollapsed,
   darkMode,
+  smartClipboardEnabled,
   libraryRefreshing,
   libraryButtonRef,
   windowApi,
@@ -31,7 +34,8 @@ export function AppTitlebar({
   onToggleSidePanels,
   onToggleLibraryMenu,
   onRefreshLibrary,
-  onToggleDarkMode
+  onToggleDarkMode,
+  onToggleSmartClipboard
 }: AppTitlebarProps): JSX.Element {
   return (
     <header className="app-titlebar">
@@ -86,6 +90,16 @@ export function AppTitlebar({
 
         <button className="toolbar-icon-button" onClick={onToggleDarkMode} aria-label={'\u5207\u6362\u6d45\u8272\u6df1\u8272\u6a21\u5f0f'} title={'\u5207\u6362\u6d45\u8272 / \u6df1\u8272\u6a21\u5f0f'}>
           {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+
+        <button
+          className={`toolbar-icon-button ${smartClipboardEnabled ? 'is-active' : ''}`}
+          onClick={onToggleSmartClipboard}
+          aria-pressed={smartClipboardEnabled}
+          aria-label={'\u667a\u80fd\u526a\u8d34\u677f'}
+          title={'\u667a\u80fd\u526a\u8d34\u677f\uff1a\u68c0\u6d4b\u526a\u8d34\u677f\u6587\u672c\uff0c\u5e76\u5728\u786e\u8ba4\u540e\u586b\u5165\u5f53\u524d\u4f5c\u54c1 Prompt'}
+        >
+          <ClipboardCheck className="h-4 w-4" />
         </button>
       </div>
 

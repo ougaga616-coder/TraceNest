@@ -53,6 +53,7 @@ export type PicFlowData = {
   settings?: {
     theme?: 'light' | 'dark';
     cardScale?: number;
+    smartClipboardEnabled?: boolean;
   };
 };
 
@@ -82,6 +83,10 @@ export type PicFlowWindowApi = {
   minimize: () => Promise<void>;
   toggleMaximize: () => Promise<void>;
   close: () => Promise<void>;
+};
+
+export type PicFlowClipboardApi = {
+  readText: () => Promise<string>;
 };
 
 export type PicFlowLibraryResult = {
@@ -136,6 +141,7 @@ declare global {
   interface Window {
     picflow?: PicFlowApi;
     picflowWindow?: PicFlowWindowApi;
+    picflowClipboard?: PicFlowClipboardApi;
     picflowLibrary?: PicFlowLibraryApi;
   }
 }

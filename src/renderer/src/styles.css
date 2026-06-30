@@ -244,6 +244,12 @@ select,
   color: #17201c;
 }
 
+.toolbar-icon-button.is-active {
+  border-color: rgba(95, 127, 105, 0.32);
+  background: #e8f1ea;
+  color: #3f684b;
+}
+
 .toolbar-icon-button:active {
   transform: translateY(1px);
 }
@@ -259,6 +265,12 @@ select,
   border-color: rgba(175, 199, 182, 0.28);
   background: rgba(76, 76, 76, 0.9);
   color: #f4f4f4;
+}
+
+.dark .toolbar-icon-button.is-active {
+  border-color: rgba(175, 199, 182, 0.36);
+  background: rgba(175, 199, 182, 0.14);
+  color: #afc7b6;
 }
 
 .library-menu {

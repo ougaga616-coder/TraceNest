@@ -73,6 +73,7 @@ type PicFlowData = {
   settings?: {
     theme?: 'light' | 'dark';
     cardScale?: number;
+    smartClipboardEnabled?: boolean;
   };
 };
 
@@ -126,7 +127,12 @@ type PicFlowLibraryLoadResult = {
   debug?: PicFlowLibraryLoadDebug;
 };
 
-const emptyData = (): PicFlowData => ({ version: 1, cases: [], collections: [], settings: { theme: 'light', cardScale: 1.12 } });
+const defaultSettings = (): NonNullable<PicFlowData['settings']> => ({
+  theme: 'light',
+  cardScale: 1.12,
+  smartClipboardEnabled: true
+});
+const emptyData = (): PicFlowData => ({ version: 1, cases: [], collections: [], settings: defaultSettings() });
 const emptyConfig = (): PicFlowAppConfig => ({ recentLibraries: [] });
 let mainWindow: BrowserWindow | null = null;
 
@@ -252,7 +258,7 @@ function normalizeData(data: Partial<PicFlowData>): PicFlowData {
     version: 1,
     cases: Array.isArray(data.cases) ? data.cases : [],
     collections: Array.isArray(data.collections) ? data.collections : [],
-    settings: data.settings ?? { theme: 'light', cardScale: 1.12 }
+    settings: { ...defaultSettings(), ...data.settings }
   };
 }
 
@@ -312,7 +318,7 @@ function ensureLibraryStructure(root: string, name = libraryNameFromPath(root), 
 
   if (!existsSync(worksPath(root))) writeJson(worksPath(root), seed?.cases ?? []);
   if (!existsSync(collectionsPath(root))) writeJson(collectionsPath(root), seed?.collections ?? []);
-  if (!existsSync(settingsPath(root))) writeJson(settingsPath(root), seed?.settings ?? { theme: 'light', cardScale: 1.12 });
+  if (!existsSync(settingsPath(root))) writeJson(settingsPath(root), { ...defaultSettings(), ...seed?.settings });
 
   const manifest = readManifest(root);
   return {
@@ -380,7 +386,7 @@ function readDataFromLibrary(libraryPath: string): PicFlowData {
     version: 1,
     cases: readJson<PicFlowCase[]>(worksPath(libraryPath), []),
     collections: readJson<PicFlowCollection[]>(collectionsPath(libraryPath), []),
-    settings: readJson<PicFlowData['settings']>(settingsPath(libraryPath), { theme: 'light', cardScale: 1.12 })
+    settings: { ...defaultSettings(), ...readJson<PicFlowData['settings']>(settingsPath(libraryPath), defaultSettings()) }
   });
 }
 
@@ -430,14 +436,14 @@ function writeData(data: PicFlowData): PicFlowData {
     version: 1,
     cases: Array.isArray(data.cases) ? data.cases : [],
     collections: Array.isArray(data.collections) ? data.collections : [],
-    settings: data.settings ?? { theme: 'light', cardScale: 1.12 }
+    settings: { ...defaultSettings(), ...data.settings }
   };
   const libraryPath = getCurrentLibraryPath();
   if (!libraryPath) return normalized;
   ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath));
   writeJson(worksPath(libraryPath), normalized.cases);
   writeJson(collectionsPath(libraryPath), normalized.collections);
-  writeJson(settingsPath(libraryPath), normalized.settings ?? { theme: 'light', cardScale: 1.12 });
+  writeJson(settingsPath(libraryPath), normalized.settings ?? defaultSettings());
   return normalized;
 }
 
@@ -725,6 +731,7 @@ app.whenReady().then(() => {
   ipcMain.handle('picflow:copy-image', (_event, image: PicFlowImage) => copyImageToClipboard(image));
   ipcMain.handle('picflow:export-share-card-png', (_event, dataUrl: string, defaultName?: string) => exportShareCardPng(dataUrl, defaultName));
   ipcMain.handle('picflow:copy-share-card-png', (_event, dataUrl: string) => copyShareCardPngToClipboard(dataUrl));
+  ipcMain.handle('picflow-clipboard:read-text', () => clipboard.readText());
   ipcMain.handle('picflow:open-external', (_event, url: string) => {
     if (url) shell.openExternal(url);
   });

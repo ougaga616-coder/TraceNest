@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('picflowWindow', {
   close: () => ipcRenderer.invoke('window:close')
 });
 
+contextBridge.exposeInMainWorld('picflowClipboard', {
+  readText: () => ipcRenderer.invoke('picflow-clipboard:read-text')
+});
+
 contextBridge.exposeInMainWorld('picflowLibrary', {
   getCurrentLibrary: () => ipcRenderer.invoke('library:get-current'),
   loadCurrentData: () => ipcRenderer.invoke('library:load-current-data'),
