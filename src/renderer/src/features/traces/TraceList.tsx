@@ -43,10 +43,12 @@ export function TraceList({
           <h2 className="text-xl font-semibold tracking-[-0.01em] text-stone-800 dark:text-neutral-100">创作复迹</h2>
           <p className="mt-1 text-sm text-stone-500 dark:text-neutral-400">用节点画布复盘你的 AI 视觉创作过程</p>
         </div>
-        <button className="primary-button" onClick={onCreateTrace}>
-          <Plus className="h-4 w-4" />
-          新建复迹
-        </button>
+        {traces.length > 0 && (
+          <button className="primary-button" onClick={onCreateTrace}>
+            <Plus className="h-4 w-4" />
+            新建
+          </button>
+        )}
       </div>
 
       {traces.length === 0 ? (
@@ -60,7 +62,7 @@ export function TraceList({
             <div className="mt-5 flex justify-center">
               <button className="primary-button" onClick={onCreateTrace}>
                 <Plus className="h-4 w-4" />
-                新建复迹
+                新建
               </button>
             </div>
           </div>
@@ -69,6 +71,7 @@ export function TraceList({
         <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
           {traces.map((trace) => {
             const isEditing = editingTraceId === trace.id;
+            const nodeCount = trace.nodes.filter((node) => node.type === 'text').length;
             return (
               <article
                 key={trace.id}
@@ -116,7 +119,7 @@ export function TraceList({
                   <span className="mt-1 text-xs text-stone-400 dark:text-neutral-500">创建于 {formatTraceTime(trace.createdAt)}</span>
                   <span className="mt-auto inline-flex items-center gap-1.5 pt-4 text-xs font-medium text-stone-500 dark:text-neutral-400">
                     <MoreHorizontal className="h-3.5 w-3.5" />
-                    {trace.nodes.length} 个节点
+                    {nodeCount} 个节点
                   </span>
                 </button>
               </article>

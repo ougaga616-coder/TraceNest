@@ -291,6 +291,32 @@ select,
   background-image: radial-gradient(circle, rgba(214, 214, 214, 0.18) 1px, transparent 1px);
 }
 
+.trace-image-node {
+  background: rgba(252, 252, 251, 0.96);
+}
+
+.dark .trace-image-node {
+  background: rgba(48, 48, 48, 0.96);
+}
+
+.trace-image-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.trace-image-frame img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 380px;
+  object-fit: contain;
+}
+
 .library-menu {
   position: fixed;
   z-index: 9999;
@@ -461,24 +487,25 @@ select,
 .toast {
   position: fixed;
   left: 50%;
-  top: 38%;
+  top: 42%;
   z-index: 50;
   transform: translate(-50%, -50%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
-  background: rgba(40, 58, 48, 0.94);
+  background: rgba(47, 47, 47, 0.96);
   padding: 9px 16px;
   color: #ffffff;
   font-size: 14px;
   line-height: 20px;
-  box-shadow: 0 12px 32px rgba(20, 32, 24, 0.22);
+  box-shadow: 0 10px 24px rgba(20, 20, 20, 0.16);
   backdrop-filter: blur(12px);
 }
 
 .dark .toast {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(39, 52, 43, 0.96);
-  color: #f7faf6;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(224, 224, 224, 0.96);
+  color: #222222;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .brand-header {

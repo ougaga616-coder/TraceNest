@@ -24,7 +24,7 @@ import { Toast } from './components/Toast';
 import { TraceCanvas } from './features/traces/TraceCanvas';
 import { TraceList } from './features/traces/TraceList';
 import { fallbackTraceApi } from './features/traces/traceStorage';
-import { createTrace, emptyTraceData, renameTrace, type CreativeTrace, type TraceData } from './features/traces/traceTypes';
+import { createImageNode, createTextNode, createTrace, createTraceEdge, deleteTraceEdge, deleteTraceNode, emptyTraceData, moveTraceNode, nextDefaultTraceTitle, renameTrace, updateTraceTextNode, type CreativeTrace, type ImageTraceNode, type TextTraceNode, type TraceData } from './features/traces/traceTypes';
 import { useSmartClipboard } from './hooks/useSmartClipboard';
 import type { PicFlowCase, PicFlowClipboardApi, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
 import { resolveWorkImageSrc } from './utils/imageDisplay';
@@ -33,6 +33,16 @@ import { filterWorksByQuery } from './utils/workSearch';
 import { updateWork } from './utils/workUpdates';
 
 type ViewKey = 'all' | 'pending' | 'favorites' | 'traces' | `collection:${string}`;
+type TraceHistory = {
+  undo: CreativeTrace[];
+  redo: CreativeTrace[];
+};
+type ClipboardImageRequest = {
+  dataUrl: string;
+  hash: string;
+  width: number;
+  height: number;
+};
 type ConfirmState =
   | { type: 'case'; id: string; title: string }
   | { type: 'collection'; id: string; name: string }
@@ -47,6 +57,7 @@ const emptyData: PicFlowData = { version: 1, cases: [], collections: [], setting
 const modelPresets = ['Nano banana', 'Nano banana Pro', 'GPT Image', 'Midjourney', 'Stable Diffusion', '即梦', '可灵', 'Libli'];
 const minCardScale = 0.78;
 const maxCardScale = 1.45;
+const traceHistoryLimit = 50;
 const emptyLibraryState: PicFlowLibraryState = { ready: false, setupRequired: true, missing: false, recentLibraries: [] };
 
 const picflowApi = window.picflow ?? {
@@ -60,6 +71,8 @@ const picflowApi = window.picflow ?? {
   },
   loadTraces: fallbackTraceApi.loadTraces,
   saveTraces: fallbackTraceApi.saveTraces,
+  saveTraceImagePaths: async () => [],
+  saveTraceDataUrlImage: async (dataUrl: string, name?: string) => ({ imagePath: dataUrl, name }),
   getStorageInfo: async () => ({ dataPath: 'Electron 模式下保存到 LOCALAPPDATA', imageDir: 'Electron 模式下保存图片' }),
   selectImages: async () => [],
   getPathForFile: () => '',
@@ -238,6 +251,14 @@ function nextAfterDelete(cases: PicFlowCase[], deletedId: string): string | null
   return next?.id ?? null;
 }
 
+function cloneTrace(trace: CreativeTrace): CreativeTrace {
+  return JSON.parse(JSON.stringify(trace)) as CreativeTrace;
+}
+
+function hashClipboardImage(dataUrl: string, width: number, height: number): string {
+  return `${width}x${height}:${dataUrl.length}:${dataUrl.slice(0, 96)}:${dataUrl.slice(-96)}`;
+}
+
 export default function App(): JSX.Element {
   const [data, setData] = useState<PicFlowData>(emptyData);
   const [traceData, setTraceData] = useState<TraceData>(emptyTraceData);
@@ -265,8 +286,14 @@ export default function App(): JSX.Element {
   const [cutWorkId, setCutWorkId] = useState<string | null>(null);
   const [postImportCaseId, setPostImportCaseId] = useState<string | null>(null);
   const [shareCardCaseId, setShareCardCaseId] = useState<string | null>(null);
+  const [clipboardImageRequest, setClipboardImageRequest] = useState<ClipboardImageRequest | null>(null);
   const libraryButtonRef = useRef<HTMLButtonElement | null>(null);
   const suppressSaveRef = useRef(false);
+  const traceHistoryRef = useRef(new Map<string, TraceHistory>());
+  const dismissedClipboardImageHashRef = useRef<string | null>(null);
+  const handledClipboardImageHashRef = useRef<string | null>(null);
+  const suggestedClipboardImageHashRef = useRef<string | null>(null);
+  const readingClipboardImageRef = useRef(false);
 
   useEffect(() => {
     void loadCurrentLibraryDataAndApply('startup');
@@ -286,6 +313,10 @@ export default function App(): JSX.Element {
   useEffect(() => {
     localStorage.setItem('picflow.sidePanelsCollapsed', String(sidePanelsCollapsed));
   }, [sidePanelsCollapsed]);
+
+  useEffect(() => {
+    traceHistoryRef.current.clear();
+  }, [libraryState.currentLibrary?.path]);
 
   useEffect(() => {
     if (!libraryMenuOpen) return;
@@ -322,6 +353,59 @@ export default function App(): JSX.Element {
   }, [toast]);
 
   useEffect(() => {
+    if (!loaded || !libraryState.ready || activeView === 'traces' || !picflowClipboard?.readImage) {
+      setClipboardImageRequest(null);
+      return;
+    }
+    if (confirmState || postImportCaseId || shareCardCaseId || libraryMenuOpen || cutWorkId) return;
+
+    let timer = 0;
+    let disposed = false;
+    const detectImageClipboard = async () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        if (disposed || readingClipboardImageRef.current) return;
+        if (isTextEditingTarget(document.activeElement)) return;
+        readingClipboardImageRef.current = true;
+        try {
+          const image = await picflowClipboard.readImage?.();
+          if (!image) {
+            setClipboardImageRequest(null);
+            return;
+          }
+          const hash = hashClipboardImage(image.dataUrl, image.width, image.height);
+          if (
+            hash === dismissedClipboardImageHashRef.current ||
+            hash === handledClipboardImageHashRef.current
+          ) {
+            return;
+          }
+          suggestedClipboardImageHashRef.current = hash;
+          setClipboardImageRequest({ ...image, hash });
+        } finally {
+          readingClipboardImageRef.current = false;
+        }
+      }, 120);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void detectImageClipboard();
+    };
+    const removeAppFocusListener = picflowClipboard.onAppFocus?.(() => void detectImageClipboard());
+    window.addEventListener('focus', detectImageClipboard);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    void detectImageClipboard();
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', detectImageClipboard);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      removeAppFocusListener?.();
+    };
+  }, [activeView, confirmState, cutWorkId, libraryMenuOpen, libraryState.ready, loaded, postImportCaseId, shareCardCaseId]);
+
+  useEffect(() => {
     const onPaste = async (event: globalThis.ClipboardEvent) => {
       if (isTextEditingTarget(event.target)) return;
       if (activeView === 'traces') return;
@@ -339,8 +423,9 @@ export default function App(): JSX.Element {
       event.preventDefault();
       try {
       const dataUrl = await fileToDataUrl(imageFile);
-      const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'clipboard-image.png');
+        const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'clipboard-image.png');
         appendWork(createCase({ images: [image], captureMethod: 'clipboard-paste' }), { openPostImportModal: true });
+        void markCurrentClipboardImageHandled();
         setToast('\u5df2\u4ece\u526a\u8d34\u677f\u5bfc\u5165\u56fe\u7247');
       } catch {
         setToast('\u56fe\u7247\u4fdd\u5b58\u5931\u8d25');
@@ -354,7 +439,7 @@ export default function App(): JSX.Element {
   const smartClipboard = useSmartClipboard({
     enabled: libraryState.ready,
     selectedWork: selectedCase,
-    modalOpen: Boolean(confirmState || postImportCaseId || shareCardCaseId || libraryMenuOpen),
+    modalOpen: Boolean(confirmState || postImportCaseId || shareCardCaseId || libraryMenuOpen || clipboardImageRequest),
     movingWork: Boolean(cutWorkId),
     clipboardApi: picflowClipboard,
     onReadError: () => setToast('\u65e0\u6cd5\u8bfb\u53d6\u526a\u8d34\u677f')
@@ -527,6 +612,68 @@ export default function App(): JSX.Element {
     void picflowApi.saveTraces(nextData);
   }
 
+  function traceHistory(traceId: string): TraceHistory {
+    const existing = traceHistoryRef.current.get(traceId);
+    if (existing) return existing;
+    const next = { undo: [], redo: [] };
+    traceHistoryRef.current.set(traceId, next);
+    return next;
+  }
+
+  function pushTraceUndo(trace: CreativeTrace): void {
+    const history = traceHistory(trace.id);
+    history.undo.push(cloneTrace(trace));
+    if (history.undo.length > traceHistoryLimit) history.undo.shift();
+    history.redo = [];
+  }
+
+  function commitSelectedTraceChange(updater: (trace: CreativeTrace) => CreativeTrace, options: { recordHistory?: boolean } = {}): CreativeTrace | null {
+    if (!selectedTraceId) return null;
+    const currentTrace = traceData.traces.find((trace) => trace.id === selectedTraceId);
+    if (!currentTrace) return null;
+    const nextTrace = updater(currentTrace);
+    if (nextTrace === currentTrace || JSON.stringify(nextTrace) === JSON.stringify(currentTrace)) return currentTrace;
+    if (options.recordHistory !== false) pushTraceUndo(currentTrace);
+    persistTraces({
+      traces: traceData.traces.map((trace) => (trace.id === selectedTraceId ? nextTrace : trace))
+    });
+    return nextTrace;
+  }
+
+  function restoreTraceSnapshot(traceId: string, snapshot: CreativeTrace): void {
+    persistTraces({
+      traces: traceData.traces.map((trace) => (trace.id === traceId ? cloneTrace(snapshot) : trace))
+    });
+  }
+
+  function undoSelectedTrace(): boolean {
+    if (!selectedTraceId) return false;
+    const currentTrace = traceData.traces.find((trace) => trace.id === selectedTraceId);
+    if (!currentTrace) return false;
+    const history = traceHistory(selectedTraceId);
+    const previousTrace = history.undo.pop();
+    if (!previousTrace) return false;
+    history.redo.push(cloneTrace(currentTrace));
+    if (history.redo.length > traceHistoryLimit) history.redo.shift();
+    restoreTraceSnapshot(selectedTraceId, previousTrace);
+    setToast('已撤回');
+    return true;
+  }
+
+  function redoSelectedTrace(): boolean {
+    if (!selectedTraceId) return false;
+    const currentTrace = traceData.traces.find((trace) => trace.id === selectedTraceId);
+    if (!currentTrace) return false;
+    const history = traceHistory(selectedTraceId);
+    const nextTrace = history.redo.pop();
+    if (!nextTrace) return false;
+    history.undo.push(cloneTrace(currentTrace));
+    if (history.undo.length > traceHistoryLimit) history.undo.shift();
+    restoreTraceSnapshot(selectedTraceId, nextTrace);
+    setToast('已恢复');
+    return true;
+  }
+
   function openTraceModule(): void {
     setActiveView('traces');
     setSearch('');
@@ -535,12 +682,12 @@ export default function App(): JSX.Element {
 
   function createNewTrace(): void {
     if (!ensureLibraryReady()) return;
-    const trace = createTrace();
+    const trace = createTrace(nextDefaultTraceTitle(traceData.traces));
     const nextData = { traces: [trace, ...traceData.traces] };
     persistTraces(nextData);
     setSelectedTraceId(trace.id);
     setActiveView('traces');
-    setToast('已新建创作复迹');
+    setToast('已新建');
   }
 
   function openTrace(id: string): void {
@@ -557,18 +704,129 @@ export default function App(): JSX.Element {
   }
 
   function finishRenameTrace(id: string): void {
+    if (!editingTraceTitle.trim()) {
+      cancelRenameTrace();
+      return;
+    }
     const nextData = {
       traces: traceData.traces.map((trace) => (trace.id === id ? renameTrace(trace, editingTraceTitle) : trace))
     };
     persistTraces(nextData);
     setEditingTraceId(null);
     setEditingTraceTitle('');
-    setToast('已重命名复迹');
+    setToast('已重命名');
   }
 
   function cancelRenameTrace(): void {
     setEditingTraceId(null);
     setEditingTraceTitle('');
+  }
+
+  function renameSelectedTrace(title: string): void {
+    if (!selectedTraceId || !title.trim()) return;
+    const nextData = {
+      traces: traceData.traces.map((trace) => (trace.id === selectedTraceId ? renameTrace(trace, title) : trace))
+    };
+    persistTraces(nextData);
+    setToast('已重命名');
+  }
+
+  function createTextNodeInSelectedTrace(x: number, y: number, text = '', width = 240): string {
+    const node = createTextNode(x, y, text, width);
+    commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, node] }));
+    return node.id;
+  }
+
+  function pasteTextNodeInSelectedTrace(source: Pick<TextTraceNode, 'text' | 'width'>, x: number, y: number): string {
+    const nodeId = createTextNodeInSelectedTrace(x, y, source.text, source.width);
+    setToast('已粘贴');
+    return nodeId;
+  }
+
+  function createImageNodeInSelectedTrace(asset: { imagePath: string; name?: string }, x: number, y: number): string {
+    const node = createImageNode(x, y, asset.imagePath, asset.name);
+    commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, node] }));
+    return node.id;
+  }
+
+  async function createImageNodesInSelectedTrace(files: File[], x: number, y: number): Promise<string[]> {
+    if (!selectedTraceId) return [];
+    const imageFiles = files.filter(isImageFile);
+    if (!imageFiles.length) {
+      setToast('仅支持图片');
+      return [];
+    }
+
+    const paths = imageFiles
+      .map((file) => (picflowApi.getPathForFile?.(file) || (file as File & { path?: string }).path || '').trim())
+      .filter((path): path is string => Boolean(path));
+
+    try {
+      const assets = paths.length === imageFiles.length
+        ? await picflowApi.saveTraceImagePaths(paths)
+        : await Promise.all(imageFiles.map(async (file) => picflowApi.saveTraceDataUrlImage(await fileToDataUrl(file), file.name || 'trace-image.png')));
+      const nodes = assets.map((asset, index) => createImageNode(x + index * 28, y + index * 28, asset.imagePath, asset.name));
+      commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, ...nodes] }));
+      const ids = nodes.map((node) => node.id);
+      setToast(assets.length > 1 ? `已添加 ${assets.length} 张图片` : '已添加图片');
+      return ids;
+    } catch {
+      setToast('图片保存失败');
+      return [];
+    }
+  }
+
+  async function pasteImageNodeInSelectedTrace(file: File, x: number, y: number): Promise<string | null> {
+    if (!selectedTraceId) return null;
+    if (!isImageFile(file)) {
+      setToast('仅支持图片');
+      return null;
+    }
+    try {
+      const asset = await picflowApi.saveTraceDataUrlImage(await fileToDataUrl(file), file.name || 'trace-image.png');
+      const nodeId = createImageNodeInSelectedTrace(asset, x, y);
+      setToast('已添加图片');
+      return nodeId;
+    } catch {
+      setToast('图片保存失败');
+      return null;
+    }
+  }
+
+  function updateTextNodeInSelectedTrace(nodeId: string, text: string, options: { removeIfEmpty?: boolean } = {}): void {
+    commitSelectedTraceChange((trace) => {
+        const currentNode = trace.nodes.find((node) => node.id === nodeId);
+        if (!currentNode) return trace;
+        if (options.removeIfEmpty && !text.trim()) {
+          return { ...trace, updatedAt: nowIso(), nodes: trace.nodes.filter((node) => node.id !== nodeId) };
+        }
+        if (currentNode.type === 'text' && currentNode.text === text) return trace;
+        return updateTraceTextNode(trace, nodeId, text);
+      });
+  }
+
+  function moveNodeInSelectedTrace(nodeId: string, x: number, y: number): void {
+    commitSelectedTraceChange((trace) => {
+      const node = trace.nodes.find((item) => item.id === nodeId);
+      if (!node || (node.x === x && node.y === y)) return trace;
+      return moveTraceNode(trace, nodeId, x, y);
+    });
+  }
+
+  function deleteNodeInSelectedTrace(nodeId: string): void {
+    const nextTrace = commitSelectedTraceChange((trace) => (trace.nodes.some((node) => node.id === nodeId) ? deleteTraceNode(trace, nodeId) : trace));
+    if (!nextTrace) return;
+    setToast('已删除');
+  }
+
+  function createEdgeInSelectedTrace(fromNodeId: string, toNodeId: string): void {
+    commitSelectedTraceChange((trace) => createTraceEdge(trace, fromNodeId, toNodeId));
+  }
+
+  function deleteEdgeInSelectedTrace(edgeId: string): void {
+    const nextTrace = commitSelectedTraceChange((trace) => (trace.edges.some((edge) => edge.id === edgeId) ? deleteTraceEdge(trace, edgeId) : trace));
+    if (!nextTrace) return;
+    setToast('已删除');
   }
 
   function updateCase(id: string, patch: Partial<PicFlowCase>): void {
@@ -590,6 +848,56 @@ export default function App(): JSX.Element {
       return nextData;
     });
     setToast('\u5df2\u586b\u5165 Prompt');
+  }
+
+  function dismissClipboardImageRequest(): void {
+    if (clipboardImageRequest) dismissedClipboardImageHashRef.current = clipboardImageRequest.hash;
+    setClipboardImageRequest(null);
+  }
+
+  function completeClipboardImageRequest(): ClipboardImageRequest | null {
+    const request = clipboardImageRequest;
+    if (request) {
+      handledClipboardImageHashRef.current = request.hash;
+      dismissedClipboardImageHashRef.current = null;
+      suggestedClipboardImageHashRef.current = request.hash;
+    }
+    setClipboardImageRequest(null);
+    return request;
+  }
+
+  async function markCurrentClipboardImageHandled(): Promise<void> {
+    const image = await picflowClipboard?.readImage?.();
+    if (!image) return;
+    const hash = hashClipboardImage(image.dataUrl, image.width, image.height);
+    handledClipboardImageHashRef.current = hash;
+    suggestedClipboardImageHashRef.current = hash;
+    dismissedClipboardImageHashRef.current = null;
+    setClipboardImageRequest((current) => (current?.hash === hash ? null : current));
+  }
+
+  async function createWorkFromClipboardImage(): Promise<void> {
+    const request = completeClipboardImageRequest();
+    if (!request || !ensureLibraryReady()) return;
+    try {
+      const image = await picflowApi.saveDataUrlImage(request.dataUrl, 'clipboard-image.png');
+      appendWork(createCase({ images: [image], captureMethod: 'clipboard-paste' }), { openPostImportModal: true });
+      setToast('已导入图片');
+    } catch {
+      setToast('图片保存失败');
+    }
+  }
+
+  async function addClipboardImageAsGuide(): Promise<void> {
+    const request = completeClipboardImageRequest();
+    if (!request || !selectedCase || !ensureLibraryReady()) return;
+    try {
+      const image = await picflowApi.saveDataUrlImage(request.dataUrl, 'clipboard-image.png', 'reference');
+      addGuideImagesToCase(selectedCase.id, [image]);
+      setToast('已添加垫图');
+    } catch {
+      setToast('图片保存失败');
+    }
   }
 
   function appendWork(item: PicFlowCase, options: { openPostImportModal?: boolean } = {}): void {
@@ -780,6 +1088,7 @@ export default function App(): JSX.Element {
       const dataUrl = await fileToDataUrl(imageFile);
       const image = await picflowApi.saveDataUrlImage(dataUrl, imageFile.name || 'guide-image.png', 'reference');
       addGuideImagesToCase(caseId, [image]);
+      void markCurrentClipboardImageHandled();
       setToast('\u5df2\u6dfb\u52a0\u57ab\u56fe');
     } catch {
       setToast('\u56fe\u7247\u4fdd\u5b58\u5931\u8d25');
@@ -1255,7 +1564,23 @@ export default function App(): JSX.Element {
 
         {isTraceModule ? (
           selectedTrace ? (
-            <TraceCanvas trace={selectedTrace} onBack={backToTraceList} />
+            <TraceCanvas
+              trace={selectedTrace}
+              onBack={backToTraceList}
+              onRename={renameSelectedTrace}
+              onCreateTextNode={createTextNodeInSelectedTrace}
+              onPasteTextNode={pasteTextNodeInSelectedTrace}
+              onCreateImageNodes={createImageNodesInSelectedTrace}
+              onPasteImageNode={pasteImageNodeInSelectedTrace}
+              onUpdateTextNode={updateTextNodeInSelectedTrace}
+              onMoveNode={moveNodeInSelectedTrace}
+              onDeleteNode={deleteNodeInSelectedTrace}
+              onCreateEdge={createEdgeInSelectedTrace}
+              onDeleteEdge={deleteEdgeInSelectedTrace}
+              onUndo={undoSelectedTrace}
+              onRedo={redoSelectedTrace}
+              libraryPath={libraryState.currentLibrary?.path}
+            />
           ) : (
             <TraceList
               traces={traceData.traces}
@@ -1297,6 +1622,15 @@ export default function App(): JSX.Element {
               </p>
             </div>
           </div>
+
+          {clipboardImageRequest && (
+            <ClipboardImageConfirm
+              hasSelectedWork={Boolean(selectedCase)}
+              onCreateWork={() => void createWorkFromClipboardImage()}
+              onAddGuide={() => void addClipboardImageAsGuide()}
+              onDismiss={dismissClipboardImageRequest}
+            />
+          )}
 
           {visibleCases.length === 0 ? (
             <EmptyState
@@ -1470,6 +1804,40 @@ function BrandHeader(): JSX.Element {
       </div>
       <div className="brand-description">AIGC 视觉灵感库</div>
       <div className="brand-studio">by OMG Design Lab</div>
+    </div>
+  );
+}
+
+function ClipboardImageConfirm({
+  hasSelectedWork,
+  onCreateWork,
+  onAddGuide,
+  onDismiss
+}: {
+  hasSelectedWork: boolean;
+  onCreateWork: () => void;
+  onAddGuide: () => void;
+  onDismiss: () => void;
+}): JSX.Element {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[#d7ddd6] bg-[#fbfbfa]/86 px-3 py-2.5 shadow-[0_10px_28px_rgba(23,32,28,0.08)] backdrop-blur dark:border-[#424242] dark:bg-[#303030]/92 dark:shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
+      <div>
+        <div className="text-xs font-semibold text-stone-700 dark:text-neutral-100">检测到剪贴板图片</div>
+        <div className="mt-0.5 text-xs text-stone-500 dark:text-neutral-400">选择如何使用这张图片</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button className="h-8 rounded-[9px] bg-[#2f2f2f] px-3 text-xs font-medium text-white transition hover:bg-[#222] dark:bg-[#dedede] dark:text-[#222] dark:hover:bg-[#f0f0f0]" onClick={onCreateWork}>
+          新建作品
+        </button>
+        {hasSelectedWork && (
+          <button className="h-8 rounded-[9px] border border-black/10 bg-white/70 px-3 text-xs font-medium text-stone-700 transition hover:bg-white dark:border-white/10 dark:bg-white/8 dark:text-neutral-200 dark:hover:bg-white/12" onClick={onAddGuide}>
+            添加为垫图
+          </button>
+        )}
+        <button className="h-8 rounded-[9px] px-3 text-xs font-medium text-stone-500 transition hover:bg-black/5 hover:text-stone-700 dark:text-neutral-400 dark:hover:bg-white/8 dark:hover:text-neutral-200" onClick={onDismiss}>
+          忽略
+        </button>
+      </div>
     </div>
   );
 }

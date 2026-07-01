@@ -56,14 +56,49 @@ export type PicFlowData = {
   };
 };
 
-export type PicFlowTraceNode = {
+export type PicFlowBaseTraceNode = {
   id: string;
-  type: 'center';
+  type: 'center' | 'text' | 'image';
   x: number;
   y: number;
   width: number;
+};
+
+export type PicFlowCenterTraceNode = PicFlowBaseTraceNode & {
+  type: 'center';
   height: number;
   title: string;
+};
+
+export type PicFlowTextTraceNode = PicFlowBaseTraceNode & {
+  type: 'text';
+  height?: number;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PicFlowImageTraceNode = PicFlowBaseTraceNode & {
+  type: 'image';
+  height: number;
+  imagePath: string;
+  name?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PicFlowTraceNode = PicFlowCenterTraceNode | PicFlowTextTraceNode | PicFlowImageTraceNode;
+
+export type PicFlowTraceImageAsset = {
+  imagePath: string;
+  name?: string;
+};
+
+export type PicFlowTraceEdge = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  createdAt: string;
 };
 
 export type PicFlowTrace = {
@@ -72,7 +107,7 @@ export type PicFlowTrace = {
   createdAt: string;
   updatedAt: string;
   nodes: PicFlowTraceNode[];
-  edges: Record<string, never>[];
+  edges: PicFlowTraceEdge[];
 };
 
 export type PicFlowTraceData = {
@@ -91,6 +126,8 @@ export type PicFlowApi = {
   saveData: (data: PicFlowData) => Promise<PicFlowData>;
   loadTraces: () => Promise<PicFlowTraceData>;
   saveTraces: (data: PicFlowTraceData) => Promise<PicFlowTraceData>;
+  saveTraceImagePaths: (filePaths: string[]) => Promise<PicFlowTraceImageAsset[]>;
+  saveTraceDataUrlImage: (dataUrl: string, name?: string) => Promise<PicFlowTraceImageAsset>;
   getStorageInfo: () => Promise<StorageInfo>;
   selectImages: (target?: PicFlowLibraryImageTarget) => Promise<PicFlowImage[]>;
   getPathForFile?: (file: File) => string;
@@ -111,6 +148,7 @@ export type PicFlowWindowApi = {
 
 export type PicFlowClipboardApi = {
   readText: () => Promise<string>;
+  readImage?: () => Promise<{ dataUrl: string; width: number; height: number } | null>;
   onAppFocus?: (callback: () => void) => () => void;
 };
 

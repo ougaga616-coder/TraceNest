@@ -1,16 +1,44 @@
-export type TraceNodeType = 'center';
+export type TraceNodeType = 'center' | 'text' | 'image';
 
-export type TraceNode = {
+export type BaseTraceNode = {
   id: string;
   type: TraceNodeType;
   x: number;
   y: number;
   width: number;
+};
+
+export type CenterTraceNode = BaseTraceNode & {
+  type: 'center';
   height: number;
   title: string;
 };
 
-export type TraceEdge = Record<string, never>;
+export type TextTraceNode = BaseTraceNode & {
+  type: 'text';
+  height?: number;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ImageTraceNode = BaseTraceNode & {
+  type: 'image';
+  height: number;
+  imagePath: string;
+  name?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TraceNode = CenterTraceNode | TextTraceNode | ImageTraceNode;
+
+export type TraceEdge = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  createdAt: string;
+};
 
 export type CreativeTrace = {
   id: string;
@@ -39,6 +67,46 @@ export function createCenterNode(title: string): TraceNode {
   };
 }
 
+export function createTextNode(x: number, y: number, text = '', width = 240): TextTraceNode {
+  const timestamp = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    type: 'text',
+    x,
+    y,
+    width,
+    text,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+export function createImageNode(x: number, y: number, imagePath: string, name?: string): ImageTraceNode {
+  const timestamp = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    type: 'image',
+    x,
+    y,
+    width: 260,
+    height: 180,
+    imagePath,
+    name,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+export function nextDefaultTraceTitle(traces: CreativeTrace[]): string {
+  const baseTitle = '未命名复迹';
+  const existingTitles = new Set(traces.map((trace) => trace.title.trim()));
+  if (!existingTitles.has(baseTitle)) return baseTitle;
+
+  let index = 2;
+  while (existingTitles.has(`${baseTitle} ${index}`)) index += 1;
+  return `${baseTitle} ${index}`;
+}
+
 export function createTrace(title = '未命名复迹'): CreativeTrace {
   const timestamp = new Date().toISOString();
   return {
@@ -46,7 +114,7 @@ export function createTrace(title = '未命名复迹'): CreativeTrace {
     title,
     createdAt: timestamp,
     updatedAt: timestamp,
-    nodes: [createCenterNode(title)],
+    nodes: [],
     edges: []
   };
 }
@@ -60,7 +128,77 @@ export function renameTrace(trace: CreativeTrace, titleValue: string): CreativeT
   return {
     ...trace,
     title,
-    updatedAt: new Date().toISOString(),
-    nodes: trace.nodes.map((node) => (node.type === 'center' ? { ...node, title } : node))
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function updateTraceTextNode(trace: CreativeTrace, nodeId: string, text: string): CreativeTrace {
+  const timestamp = new Date().toISOString();
+  return {
+    ...trace,
+    updatedAt: timestamp,
+    nodes: trace.nodes.map((node) =>
+      node.id === nodeId && node.type === 'text'
+        ? { ...node, text, updatedAt: timestamp }
+        : node
+    )
+  };
+}
+
+export function moveTraceNode(trace: CreativeTrace, nodeId: string, x: number, y: number): CreativeTrace {
+  const timestamp = new Date().toISOString();
+  return {
+    ...trace,
+    updatedAt: timestamp,
+    nodes: trace.nodes.map((node) =>
+      node.id === nodeId
+        ? node.type === 'text' || node.type === 'image'
+          ? { ...node, x, y, updatedAt: timestamp }
+          : { ...node, x, y }
+        : node
+    )
+  };
+}
+
+export function deleteTraceNode(trace: CreativeTrace, nodeId: string): CreativeTrace {
+  const timestamp = new Date().toISOString();
+  return {
+    ...trace,
+    updatedAt: timestamp,
+    nodes: trace.nodes.filter((node) => node.id !== nodeId),
+    edges: trace.edges.filter((edge) => edge.fromNodeId !== nodeId && edge.toNodeId !== nodeId)
+  };
+}
+
+export function createTraceEdge(trace: CreativeTrace, fromNodeId: string, toNodeId: string): CreativeTrace {
+  if (fromNodeId === toNodeId) return trace;
+  const exists = trace.edges.some(
+    (edge) =>
+      (edge.fromNodeId === fromNodeId && edge.toNodeId === toNodeId) ||
+      (edge.fromNodeId === toNodeId && edge.toNodeId === fromNodeId)
+  );
+  if (exists) return trace;
+  const timestamp = new Date().toISOString();
+  return {
+    ...trace,
+    updatedAt: timestamp,
+    edges: [
+      ...trace.edges,
+      {
+        id: crypto.randomUUID(),
+        fromNodeId,
+        toNodeId,
+        createdAt: timestamp
+      }
+    ]
+  };
+}
+
+export function deleteTraceEdge(trace: CreativeTrace, edgeId: string): CreativeTrace {
+  const timestamp = new Date().toISOString();
+  return {
+    ...trace,
+    updatedAt: timestamp,
+    edges: trace.edges.filter((edge) => edge.id !== edgeId)
   };
 }

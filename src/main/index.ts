@@ -76,14 +76,49 @@ type PicFlowData = {
   };
 };
 
-type PicFlowTraceNode = {
+type PicFlowBaseTraceNode = {
   id: string;
-  type: 'center';
+  type: 'center' | 'text' | 'image';
   x: number;
   y: number;
   width: number;
+};
+
+type PicFlowCenterTraceNode = PicFlowBaseTraceNode & {
+  type: 'center';
   height: number;
   title: string;
+};
+
+type PicFlowTextTraceNode = PicFlowBaseTraceNode & {
+  type: 'text';
+  height?: number;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PicFlowImageTraceNode = PicFlowBaseTraceNode & {
+  type: 'image';
+  height: number;
+  imagePath: string;
+  name?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PicFlowTraceNode = PicFlowCenterTraceNode | PicFlowTextTraceNode | PicFlowImageTraceNode;
+
+type PicFlowTraceImageAsset = {
+  imagePath: string;
+  name?: string;
+};
+
+type PicFlowTraceEdge = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  createdAt: string;
 };
 
 type PicFlowTrace = {
@@ -92,7 +127,7 @@ type PicFlowTrace = {
   createdAt: string;
   updatedAt: string;
   nodes: PicFlowTraceNode[];
-  edges: Record<string, never>[];
+  edges: PicFlowTraceEdge[];
 };
 
 type PicFlowTraceData = {
@@ -214,6 +249,10 @@ function assetsDir(root: string): string {
 
 function referencesDir(root: string): string {
   return join(root, 'references');
+}
+
+function traceAssetsDir(root: string): string {
+  return join(root, 'traces', 'assets');
 }
 
 function currentLibraryPathOrThrow(): string {
@@ -341,6 +380,7 @@ function ensureLibraryStructure(root: string, name = libraryNameFromPath(root), 
   mkdirSync(join(root, 'data'), { recursive: true });
   mkdirSync(assetsDir(root), { recursive: true });
   mkdirSync(referencesDir(root), { recursive: true });
+  mkdirSync(traceAssetsDir(root), { recursive: true });
   mkdirSync(join(root, 'thumbnails'), { recursive: true });
 
   if (!existsSync(manifestPath(root))) {
@@ -501,6 +541,44 @@ function writeTraceData(data: PicFlowTraceData): PicFlowTraceData {
   return normalized;
 }
 
+function relativeTraceAssetPath(fileName: string): string {
+  return normalize(join('traces', 'assets', fileName));
+}
+
+function saveTraceImagePath(filePath: string): PicFlowTraceImageAsset {
+  const libraryPath = currentLibraryPathOrThrow();
+  updateRecentLibrary(ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath)));
+  const extension = extname(filePath) || '.png';
+  const id = randomUUID();
+  const fileName = `${id}${extension}`;
+  const targetPath = join(traceAssetsDir(libraryPath), fileName);
+  copyFileSync(filePath, targetPath);
+  return {
+    imagePath: relativeTraceAssetPath(fileName),
+    name: basename(filePath)
+  };
+}
+
+function saveTraceImagePaths(filePaths: string[]): PicFlowTraceImageAsset[] {
+  return filePaths.map((filePath) => saveTraceImagePath(filePath));
+}
+
+function saveTraceDataUrlImage(dataUrl: string, name = 'trace-image.png'): PicFlowTraceImageAsset {
+  const libraryPath = currentLibraryPathOrThrow();
+  updateRecentLibrary(ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath)));
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) throw new Error('Unsupported image data');
+  const extension = extensionFromMime(match[1]);
+  const id = randomUUID();
+  const fileName = `${id}${extension}`;
+  const targetPath = join(traceAssetsDir(libraryPath), fileName);
+  writeFileSync(targetPath, Buffer.from(match[2], 'base64'));
+  return {
+    imagePath: relativeTraceAssetPath(fileName),
+    name
+  };
+}
+
 function copyImageToLibrary(filePath: string, target: 'asset' | 'reference' = 'asset'): PicFlowImage {
   const libraryPath = currentLibraryPathOrThrow();
   updateRecentLibrary(ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath)));
@@ -591,6 +669,35 @@ function copyShareCardPngToClipboard(dataUrl: string): boolean {
   if (image.isEmpty()) return false;
   clipboard.writeImage(image);
   return true;
+}
+
+function readClipboardImage(): { dataUrl: string; width: number; height: number } | null {
+  let image = clipboard.readImage();
+  if (image.isEmpty()) {
+    const filePath = readClipboardImageFilePath();
+    if (filePath) image = nativeImage.createFromPath(filePath);
+  }
+  if (image.isEmpty()) return null;
+  const size = image.getSize();
+  if (!size.width || !size.height) return null;
+  return {
+    dataUrl: image.toDataURL(),
+    width: size.width,
+    height: size.height
+  };
+}
+
+function readClipboardImageFilePath(): string | null {
+  try {
+    const buffer = clipboard.readBuffer('FileNameW');
+    if (!buffer.length) return null;
+    const value = buffer.toString('utf16le').replace(/\0+$/, '');
+    if (!value || !existsSync(value)) return null;
+    if (!/\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(value)) return null;
+    return value;
+  } catch {
+    return null;
+  }
 }
 
 async function exportShareCardPng(dataUrl: string, defaultName = 'picflow-share-card.png'): Promise<boolean> {
@@ -769,6 +876,8 @@ app.whenReady().then(() => {
   ipcMain.handle('picflow:save-data', (_event, data: PicFlowData) => writeData(data));
   ipcMain.handle('picflow:load-traces', () => readTraceData());
   ipcMain.handle('picflow:save-traces', (_event, data: PicFlowTraceData) => writeTraceData(data));
+  ipcMain.handle('picflow:save-trace-image-paths', (_event, filePaths: string[]) => saveTraceImagePaths(filePaths));
+  ipcMain.handle('picflow:save-trace-data-url-image', (_event, dataUrl: string, name?: string) => saveTraceDataUrlImage(dataUrl, name));
   ipcMain.handle('picflow:get-storage-info', () => {
     const libraryPath = getCurrentLibraryPath();
     return {
@@ -792,6 +901,7 @@ app.whenReady().then(() => {
   ipcMain.handle('picflow:export-share-card-png', (_event, dataUrl: string, defaultName?: string) => exportShareCardPng(dataUrl, defaultName));
   ipcMain.handle('picflow:copy-share-card-png', (_event, dataUrl: string) => copyShareCardPngToClipboard(dataUrl));
   ipcMain.handle('picflow-clipboard:read-text', () => clipboard.readText());
+  ipcMain.handle('picflow-clipboard:read-image', () => readClipboardImage());
   ipcMain.handle('picflow:open-external', (_event, url: string) => {
     if (url) shell.openExternal(url);
   });

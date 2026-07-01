@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('picflow', {
   saveData: (data: unknown) => ipcRenderer.invoke('picflow:save-data', data),
   loadTraces: () => ipcRenderer.invoke('picflow:load-traces'),
   saveTraces: (data: unknown) => ipcRenderer.invoke('picflow:save-traces', data),
+  saveTraceImagePaths: (filePaths: string[]) => ipcRenderer.invoke('picflow:save-trace-image-paths', filePaths),
+  saveTraceDataUrlImage: (dataUrl: string, name?: string) => ipcRenderer.invoke('picflow:save-trace-data-url-image', dataUrl, name),
   getStorageInfo: () => ipcRenderer.invoke('picflow:get-storage-info'),
   selectImages: (target?: 'asset' | 'reference') => ipcRenderer.invoke('picflow:select-images', target),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
@@ -25,6 +27,7 @@ contextBridge.exposeInMainWorld('picflowWindow', {
 
 contextBridge.exposeInMainWorld('picflowClipboard', {
   readText: () => ipcRenderer.invoke('picflow-clipboard:read-text'),
+  readImage: () => ipcRenderer.invoke('picflow-clipboard:read-image'),
   onAppFocus: (callback: () => void) => {
     const listener = () => callback();
     ipcRenderer.on('picflow-window:focus', listener);
