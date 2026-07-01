@@ -700,7 +700,7 @@ function readClipboardImageFilePath(): string | null {
   }
 }
 
-async function exportShareCardPng(dataUrl: string, defaultName = 'picflow-share-card.png'): Promise<boolean> {
+async function exportShareCardPng(dataUrl: string, defaultName = 'tracenest-share-card.png'): Promise<boolean> {
   const image = imageFromDataUrl(dataUrl);
   if (image.isEmpty()) return false;
 
@@ -729,10 +729,10 @@ function setupDefaultLibrary(): PicFlowLibraryActionResult {
 
 async function chooseCustomLibrary(): Promise<PicFlowLibraryActionResult> {
   const result = await dialog.showOpenDialog({
-    title: '选择 PicFlow 资源库存放位置',
+    title: '选择 TraceNest 资源库存放位置',
     properties: ['openDirectory', 'createDirectory']
   });
-  if (result.canceled || !result.filePaths[0]) return { ok: false, message: '请先设置资源库后再开始使用 PicFlow', state: getLibraryState() };
+  if (result.canceled || !result.filePaths[0]) return { ok: false, message: '请先设置资源库后再开始使用 TraceNest', state: getLibraryState() };
   const summary = ensureLibraryStructure(result.filePaths[0], libraryNameFromPath(result.filePaths[0]));
   updateRecentLibrary(summary);
   return { ok: true, message: '已创建资源库', state: getLibraryState() };
@@ -740,13 +740,13 @@ async function chooseCustomLibrary(): Promise<PicFlowLibraryActionResult> {
 
 async function createLibraryShell(): Promise<PicFlowLibraryActionResult> {
   const result = await dialog.showOpenDialog({
-    title: '创建新 PicFlow 资源库',
+    title: '创建新 TraceNest 资源库',
     properties: ['openDirectory', 'createDirectory']
   });
   if (result.canceled || !result.filePaths[0]) return { ok: false, message: '已取消创建资源库', state: getLibraryState() };
 
   try {
-    if (existsSync(manifestPath(result.filePaths[0]))) return { ok: false, message: '该文件夹已经是 PicFlow 资源库', state: getLibraryState() };
+    if (existsSync(manifestPath(result.filePaths[0]))) return { ok: false, message: '该文件夹已经是 TraceNest 资源库', state: getLibraryState() };
     const summary = ensureLibraryStructure(result.filePaths[0], libraryNameFromPath(result.filePaths[0]));
     updateRecentLibrary(summary);
     return { ok: true, message: '已创建并切换资源库', state: getLibraryState() };
@@ -757,13 +757,13 @@ async function createLibraryShell(): Promise<PicFlowLibraryActionResult> {
 
 async function addLibraryShell(): Promise<PicFlowLibraryActionResult> {
   const result = await dialog.showOpenDialog({
-    title: '添加 PicFlow 资源库',
+    title: '添加 TraceNest 资源库',
     properties: ['openDirectory']
   });
   if (result.canceled || !result.filePaths[0]) return { ok: false, message: '已取消添加资源库', state: getLibraryState() };
 
   const manifest = readManifest(result.filePaths[0]);
-  if (!manifest) return { ok: false, message: '这不是有效的 PicFlow 资源库', state: getLibraryState() };
+  if (!manifest) return { ok: false, message: '这不是有效的 TraceNest 资源库', state: getLibraryState() };
   const summary = ensureLibraryStructure(result.filePaths[0], manifest.name);
   updateRecentLibrary(summary);
   return { ok: true, message: '已切换资源库', state: getLibraryState() };
@@ -841,7 +841,7 @@ function createWindow(): void {
     height: 920,
     minWidth: 1120,
     minHeight: 720,
-    title: '图迹 PicFlow',
+    title: '图迹 TraceNest',
     frame: false,
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,

@@ -205,7 +205,7 @@ function drawBrand(ctx: CanvasRenderingContext2D, cardRect: Rect): void {
   ctx.font = '400 17px sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText('PicFlow / by OMG Design Lab', cardRect.x + cardRect.width - cardPadding, cardRect.y + cardRect.height - 44);
+  ctx.fillText('TraceNest / by OMG Design Lab', cardRect.x + cardRect.width - cardPadding, cardRect.y + cardRect.height - 44);
 }
 
 export async function renderShareCardToCanvas(canvas: HTMLCanvasElement, data: ShareCardRenderData): Promise<void> {

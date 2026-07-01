@@ -1,9 +1,10 @@
 {
-  "name": "picflow",
+  "name": "tracenest",
   "version": "0.1.0",
-  "description": "图迹 PicFlow - local AIGC visual case library",
+  "productName": "TraceNest",
+  "description": "图迹 TraceNest - local AIGC visual case library",
   "main": "out/main/index.js",
-  "author": "PicFlow",
+  "author": "TraceNest",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",

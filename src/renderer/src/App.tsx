@@ -102,7 +102,7 @@ const picflowApi = window.picflow ?? {
   exportShareCardPng: async (dataUrl: string) => {
     const link = document.createElement('a');
     link.href = dataUrl;
-    link.download = 'picflow-share-card.png';
+    link.download = 'tracenest-share-card.png';
     link.click();
     return true;
   },
@@ -1798,10 +1798,10 @@ function BrandHeader(): JSX.Element {
   return (
     <div className="brand-header">
       <div className="brand-identity">
-        <div className="brand-logo">PF</div>
+        <div className="brand-logo">TN</div>
         <div className="brand-name-block">
           <div className="brand-title">图迹</div>
-          <div className="brand-en">PICFLOW</div>
+          <div className="brand-en">TRACENEST</div>
         </div>
       </div>
       <div className="brand-description">AIGC 视觉灵感库</div>
@@ -1863,7 +1863,7 @@ function LibraryGateDialog({
         <div className="library-gate-icon">
           <Database className="h-5 w-5" />
         </div>
-        <h2>{missing ? '未找到当前资源库' : '设置你的 PicFlow 资源库'}</h2>
+        <h2>{missing ? '未找到当前资源库' : '设置你的 TraceNest 资源库'}</h2>
         <p>
           {missing
             ? '可能是资源库文件夹被移动、重命名或删除。你可以重新添加已有资源库，或创建一个新的资源库。'
@@ -2440,7 +2440,7 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
           ? '确认删除图集？'
           : '确认删除作品？';
   const description = isResetTestData
-    ? '这会清空当前 PicFlow 的本地测试数据，并让应用下次启动时重新进入资源库初始化流程。此操作仅用于开发测试。'
+    ? '这会清空当前 TraceNest 的本地测试数据，并让应用下次启动时重新进入资源库初始化流程。此操作仅用于开发测试。'
     : isReplaceMain
       ? '当前作品已有主图。确认后将使用拖入的图片作为新的主图。'
       : isClearGuides

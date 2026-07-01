@@ -9,7 +9,7 @@ function timestampForFileName(): string {
 
 export async function exportShareCardAsPng(canvas: HTMLCanvasElement, api: PicFlowApi): Promise<boolean> {
   const dataUrl = canvasToPngDataUrl(canvas);
-  return api.exportShareCardPng(dataUrl, `picflow-card-${timestampForFileName()}.png`);
+  return api.exportShareCardPng(dataUrl, `tracenest-card-${timestampForFileName()}.png`);
 }
 
 export async function copyShareCardToClipboard(canvas: HTMLCanvasElement, api: PicFlowApi): Promise<boolean> {
