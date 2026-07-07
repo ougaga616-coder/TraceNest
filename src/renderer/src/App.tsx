@@ -60,6 +60,10 @@ const minCardScale = 0.78;
 const maxCardScale = 1.45;
 const traceHistoryLimit = 50;
 const emptyLibraryState: PicFlowLibraryState = { ready: false, setupRequired: true, missing: false, recentLibraries: [] };
+const buildChannel = import.meta.env.VITE_TRACENEST_BUILD_CHANNEL;
+const mentorPreviewBuild = buildChannel === 'mentor-preview';
+const mentorPreviewExpiresAt = new Date(2026, 6, 22, 23, 59, 0).getTime();
+const expiredPreviewMessage = '内测试用版已到期，如需继续体验，请联系提供者获取新的试用版本。';
 
 const picflowApi = window.picflow ?? {
   loadData: async () => {
@@ -289,6 +293,8 @@ export default function App(): JSX.Element {
   const [clipboardImportDraft, setClipboardImportDraft] = useState<PicFlowCase | null>(null);
   const [shareCardCaseId, setShareCardCaseId] = useState<string | null>(null);
   const [clipboardImageRequest, setClipboardImageRequest] = useState<ClipboardImageRequest | null>(null);
+  const [expiryDialogOpen, setExpiryDialogOpen] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const libraryButtonRef = useRef<HTMLButtonElement | null>(null);
   const suppressSaveRef = useRef(false);
   const traceHistoryRef = useRef(new Map<string, TraceHistory>());
@@ -296,10 +302,35 @@ export default function App(): JSX.Element {
   const handledClipboardImageHashRef = useRef<string | null>(null);
   const suggestedClipboardImageHashRef = useRef<string | null>(null);
   const readingClipboardImageRef = useRef(false);
+  const previewReadOnly = mentorPreviewBuild && nowTick > mentorPreviewExpiresAt;
+
+  function isPreviewExpiredNow(): boolean {
+    return mentorPreviewBuild && Date.now() > mentorPreviewExpiresAt;
+  }
+
+  function canUseWriteFeatures(): boolean {
+    if (!isPreviewExpiredNow()) return true;
+    setNowTick(Date.now());
+    setExpiryDialogOpen(true);
+    return false;
+  }
 
   useEffect(() => {
     void loadCurrentLibraryDataAndApply('startup');
   }, []);
+
+  useEffect(() => {
+    if (!mentorPreviewBuild) return;
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!previewReadOnly) return;
+    setShareCardCaseId(null);
+    setClipboardImageRequest(null);
+    setCutWorkId(null);
+  }, [previewReadOnly]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -355,7 +386,7 @@ export default function App(): JSX.Element {
   }, [toast]);
 
   useEffect(() => {
-    if (!loaded || !libraryState.ready || activeView === 'traces' || !picflowClipboard?.readImage) {
+    if (!loaded || !libraryState.ready || previewReadOnly || activeView === 'traces' || !picflowClipboard?.readImage) {
       setClipboardImageRequest(null);
       return;
     }
@@ -405,7 +436,7 @@ export default function App(): JSX.Element {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       removeAppFocusListener?.();
     };
-  }, [activeView, clipboardImportDraft, confirmState, cutWorkId, libraryMenuOpen, libraryState.ready, loaded, postImportCaseId, shareCardCaseId]);
+  }, [activeView, clipboardImportDraft, confirmState, cutWorkId, libraryMenuOpen, libraryState.ready, loaded, postImportCaseId, previewReadOnly, shareCardCaseId]);
 
   useEffect(() => {
     const onPaste = async (event: globalThis.ClipboardEvent) => {
@@ -416,11 +447,16 @@ export default function App(): JSX.Element {
       if (postImportCaseId || clipboardImportDraft) return;
       if (cutWorkId) {
         event.preventDefault();
+        if (!canUseWriteFeatures()) return;
         pasteCutWorkToCurrentCollection();
         return;
       }
       const imageFile = Array.from(event.clipboardData?.files ?? []).find((file) => file.type.startsWith('image/'));
       if (!imageFile) return;
+      if (!canUseWriteFeatures()) {
+        event.preventDefault();
+        return;
+      }
       if (!ensureLibraryReady()) return;
       event.preventDefault();
       try {
@@ -435,11 +471,11 @@ export default function App(): JSX.Element {
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [activeView, clipboardImportDraft, cutWorkId, data.cases, data.collections, libraryState.ready, postImportCaseId]);
+  }, [activeView, clipboardImportDraft, cutWorkId, data.cases, data.collections, libraryState.ready, postImportCaseId, previewReadOnly]);
 
   const selectedCase = data.cases.find((item) => item.id === selectedId) ?? null;
   const smartClipboard = useSmartClipboard({
-    enabled: libraryState.ready,
+    enabled: libraryState.ready && !previewReadOnly,
     selectedWork: selectedCase,
     modalOpen: Boolean(confirmState || postImportCaseId || clipboardImportDraft || shareCardCaseId || libraryMenuOpen || clipboardImageRequest),
     movingWork: Boolean(cutWorkId),
@@ -453,6 +489,7 @@ export default function App(): JSX.Element {
       if (postImportCaseId || clipboardImportDraft) return;
       if (event.ctrlKey && event.key.toLowerCase() === 'x') {
         event.preventDefault();
+        if (!canUseWriteFeatures()) return;
         if (!selectedCase) {
           setToast('\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u4f5c\u54c1');
           return;
@@ -463,11 +500,12 @@ export default function App(): JSX.Element {
       }
       if (event.key !== 'Delete' || !selectedCase) return;
       event.preventDefault();
-      setConfirmState({ type: 'case', id: selectedCase.id, title: displayTitle(selectedCase) });
+      if (!canUseWriteFeatures()) return;
+      requestConfirm({ type: 'case', id: selectedCase.id, title: displayTitle(selectedCase) });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [clipboardImportDraft, postImportCaseId, selectedCase]);
+  }, [clipboardImportDraft, postImportCaseId, previewReadOnly, selectedCase]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -630,6 +668,7 @@ export default function App(): JSX.Element {
   }
 
   function commitSelectedTraceChange(updater: (trace: CreativeTrace) => CreativeTrace, options: { recordHistory?: boolean } = {}): CreativeTrace | null {
+    if (!canUseWriteFeatures()) return null;
     if (!selectedTraceId) return null;
     const currentTrace = traceData.traces.find((trace) => trace.id === selectedTraceId);
     if (!currentTrace) return null;
@@ -643,12 +682,14 @@ export default function App(): JSX.Element {
   }
 
   function restoreTraceSnapshot(traceId: string, snapshot: CreativeTrace): void {
+    if (!canUseWriteFeatures()) return;
     persistTraces({
       traces: traceData.traces.map((trace) => (trace.id === traceId ? cloneTrace(snapshot) : trace))
     });
   }
 
   function undoSelectedTrace(): boolean {
+    if (!canUseWriteFeatures()) return false;
     if (!selectedTraceId) return false;
     const currentTrace = traceData.traces.find((trace) => trace.id === selectedTraceId);
     if (!currentTrace) return false;
@@ -663,6 +704,7 @@ export default function App(): JSX.Element {
   }
 
   function redoSelectedTrace(): boolean {
+    if (!canUseWriteFeatures()) return false;
     if (!selectedTraceId) return false;
     const currentTrace = traceData.traces.find((trace) => trace.id === selectedTraceId);
     if (!currentTrace) return false;
@@ -683,6 +725,7 @@ export default function App(): JSX.Element {
   }
 
   function createNewTrace(): void {
+    if (!canUseWriteFeatures()) return;
     if (!ensureLibraryReady()) return;
     const trace = createTrace(nextDefaultTraceTitle(traceData.traces));
     const nextData = { traces: [trace, ...traceData.traces] };
@@ -706,6 +749,10 @@ export default function App(): JSX.Element {
   }
 
   function finishRenameTrace(id: string): void {
+    if (!canUseWriteFeatures()) {
+      cancelRenameTrace();
+      return;
+    }
     if (!editingTraceTitle.trim()) {
       cancelRenameTrace();
       return;
@@ -724,7 +771,13 @@ export default function App(): JSX.Element {
     setEditingTraceTitle('');
   }
 
+  function requestConfirm(state: NonNullable<ConfirmState>): void {
+    if (!canUseWriteFeatures()) return;
+    setConfirmState(state);
+  }
+
   function renameSelectedTrace(title: string): void {
+    if (!canUseWriteFeatures()) return;
     if (!selectedTraceId || !title.trim()) return;
     const nextData = {
       traces: traceData.traces.map((trace) => (trace.id === selectedTraceId ? renameTrace(trace, title) : trace))
@@ -734,24 +787,28 @@ export default function App(): JSX.Element {
   }
 
   function createTextNodeInSelectedTrace(x: number, y: number, text = '', width = 240): string {
+    if (!canUseWriteFeatures()) return '';
     const node = createTextNode(x, y, text, width);
     commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, node] }));
     return node.id;
   }
 
   function pasteTextNodeInSelectedTrace(source: Pick<TextTraceNode, 'text' | 'width'>, x: number, y: number): string {
+    if (!canUseWriteFeatures()) return '';
     const nodeId = createTextNodeInSelectedTrace(x, y, source.text, source.width);
     setToast('已粘贴');
     return nodeId;
   }
 
   function createImageNodeInSelectedTrace(asset: { imagePath: string; name?: string }, x: number, y: number): string {
+    if (!canUseWriteFeatures()) return '';
     const node = createImageNode(x, y, asset.imagePath, asset.name);
     commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, node] }));
     return node.id;
   }
 
   function createWorkNodeInSelectedTrace(workId: string, x: number, y: number): string {
+    if (!canUseWriteFeatures()) return '';
     const node = createWorkNode(x, y, workId);
     commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, node] }));
     setToast('已插入作品');
@@ -759,6 +816,7 @@ export default function App(): JSX.Element {
   }
 
   async function createImageNodesInSelectedTrace(files: File[], x: number, y: number): Promise<string[]> {
+    if (!canUseWriteFeatures()) return [];
     if (!selectedTraceId) return [];
     const imageFiles = files.filter(isImageFile);
     if (!imageFiles.length) {
@@ -786,6 +844,7 @@ export default function App(): JSX.Element {
   }
 
   async function pasteImageNodeInSelectedTrace(file: File, x: number, y: number): Promise<string | null> {
+    if (!canUseWriteFeatures()) return null;
     if (!selectedTraceId) return null;
     if (!isImageFile(file)) {
       setToast('仅支持图片');
@@ -803,6 +862,7 @@ export default function App(): JSX.Element {
   }
 
   function updateTextNodeInSelectedTrace(nodeId: string, text: string, options: { removeIfEmpty?: boolean } = {}): void {
+    if (!canUseWriteFeatures()) return;
     commitSelectedTraceChange((trace) => {
         const currentNode = trace.nodes.find((node) => node.id === nodeId);
         if (!currentNode) return trace;
@@ -815,6 +875,7 @@ export default function App(): JSX.Element {
   }
 
   function moveNodeInSelectedTrace(nodeId: string, x: number, y: number): void {
+    if (!canUseWriteFeatures()) return;
     commitSelectedTraceChange((trace) => {
       const node = trace.nodes.find((item) => item.id === nodeId);
       if (!node || (node.x === x && node.y === y)) return trace;
@@ -823,6 +884,7 @@ export default function App(): JSX.Element {
   }
 
   function resizeTraceNodeInSelectedTrace(nodeId: string, width: number, height: number): void {
+    if (!canUseWriteFeatures()) return;
     commitSelectedTraceChange((trace) => {
       const node = trace.nodes.find((item) => item.id === nodeId);
       if (!node || (node.type !== 'image' && node.type !== 'work') || (node.width === width && node.height === height)) return trace;
@@ -840,12 +902,14 @@ export default function App(): JSX.Element {
   }
 
   function deleteNodeInSelectedTrace(nodeId: string): void {
+    if (!canUseWriteFeatures()) return;
     const nextTrace = commitSelectedTraceChange((trace) => (trace.nodes.some((node) => node.id === nodeId) ? deleteTraceNode(trace, nodeId) : trace));
     if (!nextTrace) return;
     setToast('已删除');
   }
 
   function moveNodesInSelectedTrace(positions: Array<{ id: string; x: number; y: number }>): void {
+    if (!canUseWriteFeatures()) return;
     if (positions.length === 0) return;
     const nextPositions = new Map(positions.map((position) => [position.id, position]));
     commitSelectedTraceChange((trace) => {
@@ -864,6 +928,7 @@ export default function App(): JSX.Element {
   }
 
   function deleteNodesInSelectedTrace(nodeIds: string[]): void {
+    if (!canUseWriteFeatures()) return;
     if (nodeIds.length === 0) return;
     const nodeIdSet = new Set(nodeIds);
     const nextTrace = commitSelectedTraceChange((trace) => {
@@ -881,16 +946,19 @@ export default function App(): JSX.Element {
   }
 
   function createEdgeInSelectedTrace(fromNodeId: string, toNodeId: string): void {
+    if (!canUseWriteFeatures()) return;
     commitSelectedTraceChange((trace) => createTraceEdge(trace, fromNodeId, toNodeId));
   }
 
   function deleteEdgeInSelectedTrace(edgeId: string): void {
+    if (!canUseWriteFeatures()) return;
     const nextTrace = commitSelectedTraceChange((trace) => (trace.edges.some((edge) => edge.id === edgeId) ? deleteTraceEdge(trace, edgeId) : trace));
     if (!nextTrace) return;
     setToast('已删除');
   }
 
   async function exportTracePng(dataUrl: string, fileName: string): Promise<boolean> {
+    if (!canUseWriteFeatures()) return false;
     if (!dataUrl) {
       setToast('导出失败');
       return false;
@@ -906,6 +974,7 @@ export default function App(): JSX.Element {
   }
 
   function updateCase(id: string, patch: Partial<PicFlowCase>): void {
+    if (!canUseWriteFeatures()) return;
     setData((current) => ({
       ...current,
       cases: updateWork(current.cases, id, patch, nowIso())
@@ -913,6 +982,7 @@ export default function App(): JSX.Element {
   }
 
   function fillPromptFromSmartClipboard(): void {
+    if (!canUseWriteFeatures()) return;
     const request = smartClipboard.completeRequest();
     if (!request) return;
     setData((current) => {
@@ -953,6 +1023,7 @@ export default function App(): JSX.Element {
   }
 
   async function createWorkFromClipboardImage(): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     const request = completeClipboardImageRequest();
     if (!request || !ensureLibraryReady()) return;
     try {
@@ -964,6 +1035,7 @@ export default function App(): JSX.Element {
   }
 
   async function addClipboardImageAsGuide(): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     const request = completeClipboardImageRequest();
     if (!request || !selectedCase || !ensureLibraryReady()) return;
     try {
@@ -976,6 +1048,7 @@ export default function App(): JSX.Element {
   }
 
   function appendWork(item: PicFlowCase, options: { openPostImportModal?: boolean } = {}): void {
+    if (!canUseWriteFeatures()) return;
     setData((current) => {
       const nextData = { ...current, cases: [item, ...current.cases] };
       void picflowApi.saveData(nextData);
@@ -987,6 +1060,7 @@ export default function App(): JSX.Element {
   }
 
   function appendWorks(items: PicFlowCase[]): void {
+    if (!canUseWriteFeatures()) return;
     if (!items.length) return;
     setData((current) => {
       const nextData = { ...current, cases: [...items, ...current.cases] };
@@ -998,6 +1072,7 @@ export default function App(): JSX.Element {
   }
 
   function addMainImagesToCase(caseId: string, images: PicFlowImage[]): void {
+    if (!canUseWriteFeatures()) return;
     setData((current) => {
       const nextData = {
         ...current,
@@ -1013,6 +1088,7 @@ export default function App(): JSX.Element {
   }
 
   function addGuideImagesToCase(caseId: string, images: PicFlowImage[]): void {
+    if (!canUseWriteFeatures()) return;
     setData((current) => {
       const nextData = {
         ...current,
@@ -1027,6 +1103,7 @@ export default function App(): JSX.Element {
   }
 
   function removeGuideImage(caseId: string, imageId: string): void {
+    if (!canUseWriteFeatures()) return;
     setData((current) => {
       const nextData = {
         ...current,
@@ -1042,11 +1119,13 @@ export default function App(): JSX.Element {
   }
 
   function clearGuideImages(caseId: string): void {
+    if (!canUseWriteFeatures()) return;
     updateCase(caseId, { referenceImages: [] });
     setToast('已清空垫图');
   }
 
   async function importImages(status: PicFlowCase['status'] = 'pending'): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     if (!ensureLibraryReady()) return;
     try {
       const images = await picflowApi.selectImages();
@@ -1065,6 +1144,7 @@ export default function App(): JSX.Element {
   }
 
   async function addMainImagesToSelected(): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     if (!selectedCase) return;
     if (!ensureLibraryReady()) return;
     const images = await picflowApi.selectImages();
@@ -1074,6 +1154,7 @@ export default function App(): JSX.Element {
   }
 
   async function addGuideImagesToSelected(): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     if (!selectedCase) return;
     if (!ensureLibraryReady()) return;
     const images = await picflowApi.selectImages('reference');
@@ -1083,6 +1164,7 @@ export default function App(): JSX.Element {
   }
 
   async function addGuideImagesToImportedCase(caseId: string): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     if (!ensureLibraryReady()) return;
     try {
       const images = await picflowApi.selectImages('reference');
@@ -1097,6 +1179,7 @@ export default function App(): JSX.Element {
   async function importDroppedImages(event: DragEvent<HTMLElement>, target: 'asset' | 'reference' = 'asset'): Promise<PicFlowImage[]> {
     event.preventDefault();
     event.stopPropagation();
+    if (!canUseWriteFeatures()) return [];
     if (!ensureLibraryReady()) return [];
 
     const files = Array.from(event.dataTransfer.files ?? []);
@@ -1146,7 +1229,7 @@ export default function App(): JSX.Element {
     const images = await importDroppedImages(event, 'asset');
     if (!images.length) return;
     if (item.images.length > 0) {
-      setConfirmState({ type: 'replace-main', caseId: item.id, images });
+      requestConfirm({ type: 'replace-main', caseId: item.id, images });
       return;
     }
     addMainImagesToCase(item.id, images);
@@ -1157,6 +1240,10 @@ export default function App(): JSX.Element {
     event.stopPropagation();
     const imageFile = Array.from(event.clipboardData.files ?? []).find((file) => file.type.startsWith('image/'));
     if (!imageFile) return;
+    if (!canUseWriteFeatures()) {
+      event.preventDefault();
+      return;
+    }
     if (!ensureLibraryReady()) return;
     event.preventDefault();
     try {
@@ -1171,6 +1258,7 @@ export default function App(): JSX.Element {
   }
 
   async function addUrlImage(urlValue: string): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     const url = urlValue.trim();
     if (!url) return;
     if (!ensureLibraryReady()) return;
@@ -1198,6 +1286,7 @@ export default function App(): JSX.Element {
   }
 
   function toggleOrganizedStatus(id: string): void {
+    if (!canUseWriteFeatures()) return;
     const item = data.cases.find((work) => work.id === id);
     if (!item) return;
     const nextStatus: PicFlowCase['status'] = item.status === 'pending' ? 'confirmed' : 'pending';
@@ -1206,6 +1295,7 @@ export default function App(): JSX.Element {
   }
 
   async function savePostImportInfo(caseId: string, payload: PostImportInfoPayload): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     const nextData = {
       ...data,
       cases: data.cases.map((item) =>
@@ -1232,6 +1322,7 @@ export default function App(): JSX.Element {
   }
 
   function saveClipboardImportDraft(payload: PostImportInfoPayload): void {
+    if (!canUseWriteFeatures()) return;
     if (!clipboardImportDraft) return;
     appendWork({
       ...clipboardImportDraft,
@@ -1252,12 +1343,14 @@ export default function App(): JSX.Element {
 
   function skipClipboardImportDraft(): void {
     if (!clipboardImportDraft) return;
+    if (!canUseWriteFeatures()) return;
     appendWork(clipboardImportDraft);
     setClipboardImportDraft(null);
     setToast('\u5df2\u8df3\u8fc7\uff0c\u53ef\u7a0d\u540e\u6574\u7406');
   }
 
   async function addGuideImagesToClipboardDraft(): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     if (!clipboardImportDraft) return;
     if (!ensureLibraryReady()) return;
     try {
@@ -1278,6 +1371,10 @@ export default function App(): JSX.Element {
     event.stopPropagation();
     const imageFile = Array.from(event.clipboardData.files ?? []).find((file) => file.type.startsWith('image/'));
     if (!imageFile || !clipboardImportDraft) return;
+    if (!canUseWriteFeatures()) {
+      event.preventDefault();
+      return;
+    }
     if (!ensureLibraryReady()) return;
     event.preventDefault();
     try {
@@ -1296,6 +1393,7 @@ export default function App(): JSX.Element {
   }
 
   function removeClipboardDraftGuideImage(_caseId: string, imageId: string): void {
+    if (!canUseWriteFeatures()) return;
     setClipboardImportDraft((current) =>
       current
         ? {
@@ -1319,6 +1417,7 @@ export default function App(): JSX.Element {
   }
 
   async function copyImage(image?: PicFlowImage, label = '\u56fe\u7247'): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     if (!image) {
       setToast(`\u590d\u5236${label}\u5931\u8d25`);
       return;
@@ -1341,6 +1440,7 @@ export default function App(): JSX.Element {
   }
 
   function toggleFavorite(id: string): void {
+    if (!canUseWriteFeatures()) return;
     const item = data.cases.find((work) => work.id === id);
     if (!item) return;
     setData((current) => {
@@ -1360,6 +1460,7 @@ export default function App(): JSX.Element {
   }
 
   function applyWorkCollectionMove(workId: string, targetCollectionId?: string): void {
+    if (!canUseWriteFeatures()) return;
     const targetName = collectionName(targetCollectionId);
     setData((current) => {
       const nextData = {
@@ -1376,6 +1477,7 @@ export default function App(): JSX.Element {
   }
 
   function requestMoveWorkToCollection(workId: string, targetCollectionId?: string): void {
+    if (!canUseWriteFeatures()) return;
     const work = data.cases.find((item) => item.id === workId);
     if (!work) {
       setToast('\u79fb\u52a8\u5931\u8d25');
@@ -1391,7 +1493,7 @@ export default function App(): JSX.Element {
       return;
     }
     if (currentCollectionId && targetCollectionId) {
-      setConfirmState({
+      requestConfirm({
         type: 'move-work',
         workId,
         fromCollectionName: collectionName(currentCollectionId),
@@ -1404,6 +1506,7 @@ export default function App(): JSX.Element {
   }
 
   function pasteCutWorkToCurrentCollection(): void {
+    if (!canUseWriteFeatures()) return;
     if (!cutWorkId) return;
     if (!activeView.startsWith('collection:')) {
       setToast('\u8bf7\u5148\u6253\u5f00\u4e00\u4e2a\u56fe\u96c6\u540e\u518d\u7c98\u8d34\u4f5c\u54c1');
@@ -1414,6 +1517,10 @@ export default function App(): JSX.Element {
   }
 
   function handleWorkCardDragStart(event: DragEvent<HTMLElement>, workId: string): void {
+    if (!canUseWriteFeatures()) {
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/x-picflow-work-id', workId);
     setSelectedId(workId);
@@ -1435,10 +1542,12 @@ export default function App(): JSX.Element {
     if (!workId) return;
     event.preventDefault();
     event.stopPropagation();
+    if (!canUseWriteFeatures()) return;
     requestMoveWorkToCollection(workId, collection.id);
   }
 
   function addCollection(): void {
+    if (!canUseWriteFeatures()) return;
     const timestamp = nowIso();
     const collection: PicFlowCollection = { id: newId(), name: '新建图集', createdAt: timestamp, updatedAt: timestamp };
     setData((current) => ({ ...current, collections: [...current.collections, collection] }));
@@ -1448,11 +1557,16 @@ export default function App(): JSX.Element {
   }
 
   function startRenameCollection(collection: PicFlowCollection): void {
+    if (!canUseWriteFeatures()) return;
     setEditingCollectionId(collection.id);
     setEditingCollectionName(collection.name);
   }
 
   function finishRenameCollection(id: string): void {
+    if (!canUseWriteFeatures()) {
+      cancelRenameCollection();
+      return;
+    }
     const name = editingCollectionName.trim() || '新建图集';
     setData((current) => ({
       ...current,
@@ -1469,6 +1583,10 @@ export default function App(): JSX.Element {
 
   async function deleteConfirmed(): Promise<void> {
     if (!confirmState) return;
+    if (!canUseWriteFeatures()) {
+      setConfirmState(null);
+      return;
+    }
     if (confirmState.type === 'case') {
       const nextData = { ...data, cases: data.cases.filter((item) => item.id !== confirmState.id) };
       const nextSelectedId = selectedId === confirmState.id ? nextAfterDelete(data.cases, confirmState.id) : selectedId;
@@ -1519,6 +1637,7 @@ export default function App(): JSX.Element {
   }
 
   function addModelTag(nextTag?: string): void {
+    if (!canUseWriteFeatures()) return;
     if (!selectedCase) return;
     const tag = (nextTag ?? modelDraft).trim();
     if (!tag) return;
@@ -1528,6 +1647,7 @@ export default function App(): JSX.Element {
   }
 
   function removeModelTag(tag: string): void {
+    if (!canUseWriteFeatures()) return;
     if (!selectedCase) return;
     updateCase(selectedCase.id, { modelTags: (selectedCase.modelTags ?? []).filter((item) => item !== tag) });
   }
@@ -1557,6 +1677,7 @@ export default function App(): JSX.Element {
 
   async function runLibraryAction(action: 'create' | 'add' | 'open'): Promise<void> {
     setLibraryMenuOpen(false);
+    if (action !== 'open' && !canUseWriteFeatures()) return;
     const result =
       action === 'create'
         ? await picflowLibrary.createLibrary()
@@ -1594,6 +1715,7 @@ export default function App(): JSX.Element {
   }
 
   async function setupLibrary(action: 'default' | 'custom' | 'add' | 'create'): Promise<void> {
+    if (!canUseWriteFeatures()) return;
     const result =
       action === 'default'
         ? await picflowLibrary.setupDefaultLibrary()
@@ -1688,7 +1810,7 @@ export default function App(): JSX.Element {
                   )}
                   <button
                     className="sidebar-row-action"
-                    onClick={() => setConfirmState({ type: 'collection', id: collection.id, name: collection.name })}
+                    onClick={() => requestConfirm({ type: 'collection', id: collection.id, name: collection.name })}
                     aria-label={`删除图集 ${collection.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1731,6 +1853,8 @@ export default function App(): JSX.Element {
               onUndo={undoSelectedTrace}
               onRedo={redoSelectedTrace}
               onExportPng={exportTracePng}
+              readOnly={previewReadOnly}
+              onReadOnlyAttempt={() => setExpiryDialogOpen(true)}
               libraryPath={libraryState.currentLibrary?.path}
             />
           ) : (
@@ -1744,7 +1868,7 @@ export default function App(): JSX.Element {
               onEditingTitleChange={setEditingTraceTitle}
               onFinishRename={finishRenameTrace}
               onCancelRename={cancelRenameTrace}
-              onDeleteTrace={(trace) => setConfirmState({ type: 'trace', id: trace.id, title: trace.title })}
+              onDeleteTrace={(trace) => requestConfirm({ type: 'trace', id: trace.id, title: trace.title })}
             />
           )
         ) : (
@@ -1803,7 +1927,7 @@ export default function App(): JSX.Element {
                   onSelect={() => setSelectedId(item.id)}
                   onCopy={() => copyImage(coverImage(item))}
                   onFavorite={() => toggleFavorite(item.id)}
-                  onDelete={() => setConfirmState({ type: 'case', id: item.id, title: displayTitle(item) })}
+                  onDelete={() => requestConfirm({ type: 'case', id: item.id, title: displayTitle(item) })}
                   onDragStart={(event) => handleWorkCardDragStart(event, item.id)}
                   cardHeight={cardHeight}
                   getImageSrc={getImageDisplaySrc}
@@ -1820,7 +1944,7 @@ export default function App(): JSX.Element {
                   onSelect={() => setSelectedId(item.id)}
                   onCopy={() => copyImage(coverImage(item))}
                   onFavorite={() => toggleFavorite(item.id)}
-                  onDelete={() => setConfirmState({ type: 'case', id: item.id, title: displayTitle(item) })}
+                  onDelete={() => requestConfirm({ type: 'case', id: item.id, title: displayTitle(item) })}
                   onDragStart={(event) => handleWorkCardDragStart(event, item.id)}
                   cardHeight={cardHeight}
                   getImageSrc={getImageDisplaySrc}
@@ -1849,11 +1973,14 @@ export default function App(): JSX.Element {
           onGuideDrop={handleGuideDrop}
           onGuidePaste={handleGuidePaste}
           onRemoveGuideImage={removeGuideImage}
-          onClearGuideImages={(item) => setConfirmState({ type: 'clear-guides', caseId: item.id, title: displayTitle(item) })}
+          onClearGuideImages={(item) => requestConfirm({ type: 'clear-guides', caseId: item.id, title: displayTitle(item) })}
           onCopyGuideImage={(image) => copyImage(image, '\u57ab\u56fe')}
           onCopyMainImage={(image) => copyImage(image, '\u4e3b\u56fe')}
           onToggleOrganized={toggleOrganizedStatus}
-          onOpenShareCard={(item) => setShareCardCaseId(item.id)}
+          onOpenShareCard={(item) => {
+            if (!canUseWriteFeatures()) return;
+            setShareCardCaseId(item.id);
+          }}
           onCopy={copyText}
           clipboardRequest={smartClipboard.request}
           onSmartClipboardDismiss={smartClipboard.dismissRequest}
@@ -1895,7 +2022,7 @@ export default function App(): JSX.Element {
             className="library-menu-item is-danger"
             onClick={() => {
               setLibraryMenuOpen(false);
-              setConfirmState({ type: 'reset-test-data' });
+              requestConfirm({ type: 'reset-test-data' });
             }}
           >
             重置测试数据（开发用）
@@ -1955,6 +2082,8 @@ export default function App(): JSX.Element {
       )}
 
       <Toast message={toast} />
+
+      {expiryDialogOpen && <PreviewExpiredDialog onClose={() => setExpiryDialogOpen(false)} />}
 
       {confirmState && <ConfirmDialog state={confirmState} onCancel={() => setConfirmState(null)} onConfirm={deleteConfirmed} />}
     </div>
@@ -2548,6 +2677,21 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
       <span className="field-label dark:text-neutral-400">{label}</span>
       {children}
     </label>
+  );
+}
+
+function PreviewExpiredDialog({ onClose }: { onClose: () => void }): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
+        <p className="text-sm leading-6 text-stone-700 dark:text-neutral-200">{expiredPreviewMessage}</p>
+        <div className="mt-5 flex justify-end">
+          <button className="primary-button" onClick={onClose}>
+            我知道了
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

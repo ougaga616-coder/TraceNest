@@ -38,6 +38,8 @@ type TraceCanvasProps = {
   onUndo: () => boolean;
   onRedo: () => boolean;
   onExportPng: (dataUrl: string, fileName: string) => Promise<boolean>;
+  readOnly?: boolean;
+  onReadOnlyAttempt?: () => void;
   libraryPath?: string;
 };
 
@@ -131,6 +133,8 @@ export function TraceCanvas({
   onUndo,
   onRedo,
   onExportPng,
+  readOnly = false,
+  onReadOnlyAttempt,
   libraryPath
 }: TraceCanvasProps): JSX.Element {
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -165,6 +169,12 @@ export function TraceCanvas({
   const [exporting, setExporting] = useState(false);
   const [workPickerOpen, setWorkPickerOpen] = useState(false);
   const [workSearch, setWorkSearch] = useState('');
+
+  function canEditTrace(): boolean {
+    if (!readOnly) return true;
+    onReadOnlyAttempt?.();
+    return false;
+  }
 
   const canvasNodes = useMemo(
     () => trace.nodes.filter((node): node is CanvasNode => node.type === 'text' || node.type === 'image' || node.type === 'work'),
@@ -233,6 +243,7 @@ export function TraceCanvas({
 
       if (commandKey && key === 'z') {
         event.preventDefault();
+        if (!canEditTrace()) return;
         const changed = event.shiftKey ? onRedo() : onUndo();
         if (changed) {
           setSelectedNodeId(null);
@@ -258,6 +269,7 @@ export function TraceCanvas({
       if (event.key !== 'Delete') return;
       if (selectedNodeIds.length === 0 && !selectedNodeId && !selectedEdgeId) return;
       event.preventDefault();
+      if (!canEditTrace()) return;
       if (selectedNodeIds.length > 1) {
         onDeleteNodes(selectedNodeIds);
         clearNodeSelection();
@@ -277,7 +289,7 @@ export function TraceCanvas({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canvasNodes, editingNodeId, isTitleEditing, onDeleteEdge, onDeleteNode, onDeleteNodes, onRedo, onUndo, selectedEdgeId, selectedNodeId, selectedNodeIds]);
+  }, [canvasNodes, editingNodeId, isTitleEditing, onDeleteEdge, onDeleteNode, onDeleteNodes, onRedo, onUndo, readOnly, selectedEdgeId, selectedNodeId, selectedNodeIds]);
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -313,6 +325,7 @@ export function TraceCanvas({
       const point = pastePoint();
       if (imageFile) {
         event.preventDefault();
+        if (!canEditTrace()) return;
         void onPasteImageNode(imageFile, point.x, point.y).then((nodeId) => {
           if (nodeId) {
             selectNodes([nodeId]);
@@ -323,6 +336,7 @@ export function TraceCanvas({
       }
       if (!copiedNode) return;
       event.preventDefault();
+      if (!canEditTrace()) return;
       const x = snapToGrid(copiedNode.x + pasteOffset);
       const y = snapToGrid(copiedNode.y + pasteOffset);
       const nodeId = onPasteTextNode(copiedNode, x, y);
@@ -332,7 +346,7 @@ export function TraceCanvas({
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [copiedNode, editingNodeId, isTitleEditing, onPasteImageNode, onPasteTextNode]);
+  }, [copiedNode, editingNodeId, isTitleEditing, onPasteImageNode, onPasteTextNode, readOnly]);
 
   function snapToGrid(value: number): number {
     return Math.round(value / gridSize) * gridSize;
@@ -363,6 +377,7 @@ export function TraceCanvas({
   }
 
   function handleMediaLoad(nodeId: string, size: { width: number; height: number }, padding: number, event: SyntheticEvent<HTMLImageElement>): void {
+    if (readOnly) return;
     const image = event.currentTarget;
     if (!image.naturalWidth || !image.naturalHeight) return;
     const aspectRatio = image.naturalHeight / image.naturalWidth;
@@ -634,6 +649,7 @@ export function TraceCanvas({
 
   async function handleExportPng(): Promise<void> {
     if (exporting) return;
+    if (!canEditTrace()) return;
     setExporting(true);
     try {
       const dark = document.documentElement.classList.contains('dark');
@@ -799,6 +815,7 @@ export function TraceCanvas({
   }
 
   function startTitleEditing(): void {
+    if (!canEditTrace()) return;
     skipTitleBlurSaveRef.current = false;
     setTitleDraft(trace.title);
     setIsTitleEditing(true);
@@ -812,6 +829,10 @@ export function TraceCanvas({
     if (!isTitleEditing) return;
     const title = titleDraft.trim();
     setIsTitleEditing(false);
+    if (!canEditTrace()) {
+      setTitleDraft(trace.title);
+      return;
+    }
     if (!title || title === trace.title) {
       setTitleDraft(trace.title);
       return;
@@ -837,6 +858,7 @@ export function TraceCanvas({
   }
 
   function startNodeEditing(node: TextTraceNode, isNew = false): void {
+    if (!canEditTrace()) return;
     skipNodeBlurSaveRef.current = false;
     selectNodes([node.id]);
     setEditingNodeId(node.id);
@@ -852,6 +874,13 @@ export function TraceCanvas({
     }
     if (!editingNodeId) return;
     const text = nodeDraft.trim();
+    if (!canEditTrace()) {
+      setNodeDraft(editingOriginalText);
+      setEditingNodeId(null);
+      setEditingOriginalText('');
+      setNewEditingNodeId(null);
+      return;
+    }
     const shouldRemove = newEditingNodeId === editingNodeId && !text;
     if (shouldRemove) {
       onUpdateTextNode(editingNodeId, '', { removeIfEmpty: true });
@@ -869,6 +898,14 @@ export function TraceCanvas({
     if (!editingNodeId) return;
     skipNodeBlurSaveRef.current = true;
     if (newEditingNodeId === editingNodeId && !editingOriginalText.trim()) {
+      if (readOnly) {
+        canEditTrace();
+        setNodeDraft(editingOriginalText);
+        setEditingNodeId(null);
+        setEditingOriginalText('');
+        setNewEditingNodeId(null);
+        return;
+      }
       onUpdateTextNode(editingNodeId, '', { removeIfEmpty: true });
     }
     setNodeDraft(editingOriginalText);
@@ -984,6 +1021,7 @@ export function TraceCanvas({
     const target = event.target as HTMLElement | null;
     if (!target || target.closest('[data-trace-node="true"]')) return;
     if (target.closest('button, input, textarea, select')) return;
+    if (!canEditTrace()) return;
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
     const width = 240;
@@ -1013,13 +1051,14 @@ export function TraceCanvas({
     if (!Array.from(event.dataTransfer.types).includes('Files')) return;
     event.preventDefault();
     event.stopPropagation();
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = readOnly ? 'none' : 'copy';
   }
 
   function handleCanvasDrop(event: ReactDragEvent<HTMLDivElement>): void {
     if (!Array.from(event.dataTransfer.types).includes('Files')) return;
     event.preventDefault();
     event.stopPropagation();
+    if (!canEditTrace()) return;
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
     const x = point.x - 130;
@@ -1065,6 +1104,14 @@ export function TraceCanvas({
     if (!drag) return;
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
+    if (readOnly) {
+      if (Math.abs(event.clientX - drag.startX) > 3 || Math.abs(event.clientY - drag.startY) > 3) {
+        dragRef.current = null;
+        setDragPreview(null);
+        canEditTrace();
+      }
+      return;
+    }
     const x = snapToGrid(point.x - drag.offsetX);
     const y = snapToGrid(point.y - drag.offsetY);
     drag.moved = drag.moved || Math.abs(event.clientX - drag.startX) > 3 || Math.abs(event.clientY - drag.startY) > 3;
@@ -1106,6 +1153,7 @@ export function TraceCanvas({
     if (spacePressed || isPanning) return;
     event.preventDefault();
     event.stopPropagation();
+    if (!canEditTrace()) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
@@ -1160,6 +1208,7 @@ export function TraceCanvas({
     if (spacePressed || isPanning) return;
     event.preventDefault();
     event.stopPropagation();
+    if (!canEditTrace()) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
@@ -1227,6 +1276,7 @@ export function TraceCanvas({
   }
 
   function insertWorkNode(workId: string): void {
+    if (!canEditTrace()) return;
     const point = lastCanvasPointRef.current ?? viewportCenterPoint();
     const nodeId = onCreateWorkNode(workId, snapToGrid(point.x - compactWorkDefaultWidth / 2), snapToGrid(point.y - compactWorkDefaultHeight / 2));
     selectNodes([nodeId]);
@@ -1263,7 +1313,10 @@ export function TraceCanvas({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="tool-button h-9 px-3" onClick={() => setWorkPickerOpen(true)}>
+          <button className="tool-button h-9 px-3" onClick={() => {
+            if (!canEditTrace()) return;
+            setWorkPickerOpen(true);
+          }}>
             <ImagePlus className="h-4 w-4" />
             插入作品
           </button>
