@@ -59,15 +59,15 @@ export function ShareCardModal({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[92vh] w-full max-w-[620px] flex-col overflow-hidden rounded-[20px] border border-[#d8ddd7] bg-[#fbfbf8] shadow-[0_28px_80px_rgba(23,32,28,0.22)] dark:border-[#484848] dark:bg-[#303030] dark:text-neutral-100">
-        <div className="flex items-center justify-between gap-4 border-b border-[#dde2dc] px-5 py-3.5 dark:border-[#3b3b3b]">
+      <div className="flex max-h-[92vh] w-full max-w-[620px] flex-col overflow-hidden rounded-[20px] border border-[#d7e5ef] bg-[#fbfbf8] shadow-[0_28px_80px_rgba(23,32,28,0.22)] dark:border-[#484848] dark:bg-[#303030] dark:text-neutral-100">
+        <div className="flex items-center justify-between gap-4 border-b border-[#d9e7f1] px-5 py-3.5 dark:border-[#3b3b3b]">
           <h2 className="text-base font-medium text-stone-600 dark:text-neutral-300">分享卡片</h2>
           <button className="icon-button" onClick={onClose} aria-label="关闭" title="关闭">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#edf1eb] px-4 py-4 dark:bg-[#262a27]">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#edf5fb] px-4 py-4 dark:bg-[#262a27]">
           <ShareCardPreview
             item={item}
             getWorkImageSrc={getWorkImageSrc}
@@ -76,7 +76,7 @@ export function ShareCardModal({
           />
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#dde2dc] bg-[#fbfbf8]/95 px-5 py-3 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
+        <div className="flex justify-end gap-2 border-t border-[#d9e7f1] bg-[#fbfbf8]/95 px-5 py-3 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
           <button className="tool-button h-9 px-4" onClick={onClose}>
             关闭
           </button>

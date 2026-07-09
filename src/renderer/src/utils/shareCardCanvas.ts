@@ -52,14 +52,14 @@ function roundedRect(ctx: CanvasRenderingContext2D, rect: Rect, radius: number):
 
 function fillPanel(ctx: CanvasRenderingContext2D, rect: Rect): void {
   roundedRect(ctx, rect, contentRadius);
-  ctx.fillStyle = '#f4f7f3';
+  ctx.fillStyle = '#f4f9fd';
   ctx.fill();
-  ctx.strokeStyle = '#e1e8df';
+  ctx.strokeStyle = '#d9e7f1';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 }
 
-function drawCoveredImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, rect: Rect, radius: number, background = '#eef1ec'): void {
+function drawCoveredImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, rect: Rect, radius: number, background = '#eef6fb'): void {
   ctx.save();
   roundedRect(ctx, rect, radius);
   ctx.fillStyle = background;
@@ -76,7 +76,7 @@ function drawCoveredImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement
 function drawMainImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, rect: Rect): void {
   ctx.save();
   roundedRect(ctx, rect, contentRadius);
-  ctx.fillStyle = '#eef2ee';
+  ctx.fillStyle = '#eef6fb';
   ctx.fill();
   ctx.clip();
 
@@ -89,7 +89,7 @@ function drawMainImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, r
   ctx.drawImage(image, rect.x + (rect.width - coverWidth) / 2 - 18, rect.y + (rect.height - coverHeight) / 2 - 18, coverWidth + 36, coverHeight + 36);
   ctx.restore();
 
-  ctx.fillStyle = 'rgba(247, 249, 246, 0.42)';
+  ctx.fillStyle = 'rgba(247, 251, 255, 0.42)';
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
 
   const containScale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
@@ -102,12 +102,12 @@ function drawMainImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, r
 function drawPlaceholder(ctx: CanvasRenderingContext2D, rect: Rect, text: string): void {
   ctx.save();
   roundedRect(ctx, rect, contentRadius);
-  ctx.fillStyle = '#eef1ec';
+  ctx.fillStyle = '#eaf4ff';
   ctx.fill();
-  ctx.strokeStyle = '#d8ddd7';
+  ctx.strokeStyle = '#a8d2f2';
   ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.fillStyle = '#87938b';
+  ctx.fillStyle = '#2f6f9f';
   ctx.font = '500 26px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

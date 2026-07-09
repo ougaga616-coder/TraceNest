@@ -827,16 +827,16 @@ export default function App(): JSX.Element {
     setToast('已重命名');
   }
 
-  function createTextNodeInSelectedTrace(x: number, y: number, text = '', width = 240): string {
+  function createTextNodeInSelectedTrace(x: number, y: number, text = '', width = 240, height = 120): string {
     if (!canUseWriteFeatures()) return '';
-    const node = createTextNode(x, y, text, width);
+    const node = createTextNode(x, y, text, width, height);
     commitSelectedTraceChange((trace) => ({ ...trace, updatedAt: nowIso(), nodes: [...trace.nodes, node] }));
     return node.id;
   }
 
-  function pasteTextNodeInSelectedTrace(source: Pick<TextTraceNode, 'text' | 'width'>, x: number, y: number): string {
+  function pasteTextNodeInSelectedTrace(source: Pick<TextTraceNode, 'text' | 'width' | 'height'>, x: number, y: number): string {
     if (!canUseWriteFeatures()) return '';
-    const nodeId = createTextNodeInSelectedTrace(x, y, source.text, source.width);
+    const nodeId = createTextNodeInSelectedTrace(x, y, source.text, source.width, source.height);
     setToast('已粘贴');
     return nodeId;
   }
@@ -933,13 +933,13 @@ export default function App(): JSX.Element {
     if (!canUseWriteFeatures()) return;
     commitSelectedTraceChange((trace) => {
       const node = trace.nodes.find((item) => item.id === nodeId);
-      if (!node || (node.type !== 'image' && node.type !== 'work') || (node.width === width && node.height === height)) return trace;
+      if (!node || (node.type !== 'text' && node.type !== 'image' && node.type !== 'work') || (node.width === width && 'height' in node && node.height === height)) return trace;
       const timestamp = nowIso();
       return {
         ...trace,
         updatedAt: timestamp,
         nodes: trace.nodes.map((item) =>
-          item.id === nodeId && (item.type === 'image' || item.type === 'work')
+          item.id === nodeId && (item.type === 'text' || item.type === 'image' || item.type === 'work')
             ? { ...item, width, height, updatedAt: timestamp }
             : item
         )
@@ -1951,7 +1951,7 @@ export default function App(): JSX.Element {
 
   return (
     <div
-      className="flex h-screen flex-col bg-[#e8ebe7] text-ink dark:bg-[#242424] dark:text-neutral-100"
+      className="flex h-screen flex-col bg-[#eaf2f8] text-ink dark:bg-[#242424] dark:text-neutral-100"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => event.preventDefault()}
     >
@@ -1976,7 +1976,7 @@ export default function App(): JSX.Element {
         style={{ gridTemplateColumns: sidePanelsCollapsed ? 'minmax(620px, 1fr)' : isTraceModule ? '260px minmax(620px, 1fr)' : '260px minmax(620px, 1fr) 400px' }}
       >
         {!sidePanelsCollapsed && (
-        <aside className="flex min-h-0 flex-col bg-[#f4f5f2] dark:bg-[#2b2b2b]">
+        <aside className="flex min-h-0 flex-col bg-[#f4f8fb] dark:bg-[#2b2b2b]">
           <BrandHeader />
           <div className="px-4 py-5">
           <nav className="space-y-1.5">
@@ -1984,7 +1984,7 @@ export default function App(): JSX.Element {
             <SidebarRow active={activeView === 'pending'} icon={<Inbox />} label={'\u5f85\u6574\u7406'} count={counts.pending} onClick={() => setActiveView('pending')} />
           </nav>
 
-          <div className="sidebar-collection-section mt-6 border-t border-[#dde2dc] pt-5 dark:border-[#3b3b3b]">
+          <div className="sidebar-collection-section mt-6 border-t border-[#d9e7f1] pt-5 dark:border-[#3b3b3b]">
             <SidebarSectionHeader title="灵感图集" onAction={addCollection} />
             <div className="mt-2 space-y-1">
               <SidebarRow active={activeView === 'favorites'} icon={<Heart />} label="我的收藏" count={counts.favorites} onClick={() => setActiveView('favorites')} />
@@ -2051,7 +2051,7 @@ export default function App(): JSX.Element {
             </div>
           </div>
 
-          <div className="mt-6 border-t border-[#dde2dc] pt-5 dark:border-[#3b3b3b]">
+          <div className="mt-6 border-t border-[#d9e7f1] pt-5 dark:border-[#3b3b3b]">
             <nav className="space-y-1.5">
               <SidebarRow active={activeView === 'traces'} icon={<GitBranch />} label="创作复迹" count={traceData.traces.length} onClick={openTraceModule} />
               <SidebarRow active={activeView === 'trash'} icon={<Trash2 />} label="回收站" count={trashCount} onClick={() => setActiveView('trash')} />
@@ -2105,7 +2105,7 @@ export default function App(): JSX.Element {
           )
         ) : (
         <section
-          className={`min-h-0 overflow-y-auto bg-[#e6eae5] px-7 py-6 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#e1e6f3] dark:bg-[#2d2b33]' : ''}`}
+          className={`min-h-0 overflow-y-auto bg-[#e8f1f8] px-7 py-6 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#d8ecff] dark:bg-[#2d2b33]' : ''}`}
           onWheel={handleGalleryWheel}
           onDragEnter={(event) => {
             if (isWorkCardDrag(event)) return;
@@ -2143,11 +2143,11 @@ export default function App(): JSX.Element {
           )}
 
           {activeView === 'trash' && trashedCollections.length > 0 && (
-            <div className="mb-4 rounded-[14px] border border-[#d8ddd7] bg-[#fbfbfa]/70 p-3 dark:border-[#444] dark:bg-[#303030]/70">
+            <div className="mb-4 rounded-[14px] border border-[#d7e5ef] bg-[#fbfbfa]/70 p-3 dark:border-[#444] dark:bg-[#303030]/70">
               <div className="mb-2 text-xs font-semibold text-stone-600 dark:text-neutral-400">已删除文件夹</div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
                 {trashedCollections.map((collection) => (
-                  <div key={collection.id} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[#dde2dc] bg-white px-3 py-2 dark:border-[#494949] dark:bg-[#353535]">
+                  <div key={collection.id} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[#d9e7f1] bg-white px-3 py-2 dark:border-[#494949] dark:bg-[#353535]">
                     <Folder className="h-4 w-4 shrink-0 text-stone-400 dark:text-neutral-500" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-stone-700 dark:text-neutral-100">{collection.name}</div>
@@ -2213,7 +2213,7 @@ export default function App(): JSX.Element {
         )}
 
         {!sidePanelsCollapsed && !isTraceModule && (
-        <div className="min-h-0 bg-[#e1e6df] p-4 pl-2 dark:bg-[#282828]">
+        <div className="min-h-0 bg-[#e7f0f7] p-4 pl-2 dark:bg-[#282828]">
         <DetailPanel
           item={visibleSelectedCase}
           collections={data.collections}
@@ -2526,7 +2526,7 @@ function EmptyState({ dragging, onImport, title, description }: { dragging: bool
   return (
     <div className="flex min-h-[520px] items-center justify-center p-6">
       <div className="w-full max-w-lg px-8 py-10 text-center">
-        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[16px] bg-[#e8f1ea] text-[#5f7f69] dark:bg-[#383838] dark:text-neutral-300">
+        <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[16px] bg-[#eaf4ff] text-[#2f6f9f] dark:bg-[#383838] dark:text-neutral-300">
           <ImagePlus className="h-7 w-7" />
         </div>
         <h3 className="text-lg font-semibold tracking-[-0.01em]">{title ?? defaultTitle}</h3>
@@ -2570,8 +2570,8 @@ function CaseCard({
   const cover = item.images.find((image) => image.id === item.coverImageId) ?? item.images[0];
   return (
     <article
-      className={`group relative overflow-hidden rounded-[18px] border bg-[#fbfbfa] shadow-[0_10px_28px_rgba(23,32,28,0.055)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(23,32,28,0.09)] dark:bg-[#303030] ${
-        selected ? 'border-[#8faf9b] ring-2 ring-[#8faf9b]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d8ddd7] dark:border-[#444]'
+      className={`group relative overflow-hidden rounded-[18px] border bg-[#fcfeff] shadow-[0_18px_44px_rgba(31,56,75,0.11)] transition duration-200 hover:-translate-y-0.5 hover:border-[#a8d2f2] hover:shadow-[0_24px_56px_rgba(31,56,75,0.15)] dark:bg-[#303030] ${
+        selected ? 'border-[#a8d2f2] ring-2 ring-[#7db7e8]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d7e6f2] dark:border-[#444]'
       } ${selected ? 'is-selected' : ''}`}
       style={{ height: cardHeight }}
       draggable={!item.deletedAt}
@@ -2584,7 +2584,7 @@ function CaseCard({
       }}
     >
       <button className="block h-full w-full text-left" onClick={onSelect}>
-        <div className="relative h-full bg-[#eef0ed] dark:bg-[#383838]">
+        <div className="relative h-full bg-[#f7fbff] dark:bg-[#383838]">
           {cover ? (
             <CardCoverImage src={getImageSrc(cover)} alt={displayTitle(item)} />
           ) : (
@@ -2653,13 +2653,13 @@ function PendingCard({
   const cover = item.images.find((image) => image.id === item.coverImageId) ?? item.images[0];
   return (
     <article
-      className={`group relative overflow-hidden rounded-[18px] border bg-[#fbfbfa] shadow-[0_10px_28px_rgba(23,32,28,0.055)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(23,32,28,0.09)] dark:bg-[#303030] ${selected ? 'is-selected border-[#8faf9b] ring-2 ring-[#8faf9b]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d8ddd7] dark:border-[#444]'}`}
+      className={`group relative overflow-hidden rounded-[18px] border bg-[#fcfeff] shadow-[0_18px_44px_rgba(31,56,75,0.11)] transition duration-200 hover:-translate-y-0.5 hover:border-[#a8d2f2] hover:shadow-[0_24px_56px_rgba(31,56,75,0.15)] dark:bg-[#303030] ${selected ? 'is-selected border-[#a8d2f2] ring-2 ring-[#7db7e8]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d7e6f2] dark:border-[#444]'}`}
       style={{ height: cardHeight }}
       draggable
       onDragStart={onDragStart}
     >
       <button className="block h-full w-full text-left" onClick={onSelect}>
-        <div className="relative h-full bg-stone-100 dark:bg-neutral-800">
+        <div className="relative h-full bg-[#f7fbff] dark:bg-neutral-800">
           {cover ? <CardCoverImage src={getImageSrc(cover)} alt={displayTitle(item)} /> : <div className="flex h-full items-center justify-center text-stone-400 dark:text-neutral-500"><ImagePlus className="h-9 w-9" /></div>}
         </div>
       </button>
@@ -2685,7 +2685,7 @@ function CardCoverImage({ src, alt }: { src: string; alt: string }): JSX.Element
   const isLandscape = orientation === 'landscape';
 
   return (
-    <div className={`relative h-full w-full overflow-hidden ${isLandscape ? 'flex items-center justify-center bg-[#e4eae5] dark:bg-[#343434]' : 'bg-[#eef0ed] dark:bg-[#383838]'}`}>
+    <div className={`relative h-full w-full overflow-hidden ${isLandscape ? 'flex items-center justify-center bg-[#f4f9fd] dark:bg-[#343434]' : 'bg-[#f7fbff] dark:bg-[#383838]'}`}>
       <img
         className={isLandscape ? 'h-full w-full object-contain p-2' : 'h-full w-full object-cover object-top'}
         src={src}
@@ -2755,9 +2755,9 @@ function DetailPanel({
 }): JSX.Element {
   if (!item) {
     return (
-    <aside className="flex h-full min-h-0 items-center justify-center rounded-[18px] border border-[#d8ddd7]/75 bg-[#f7f8f5] px-8 text-center shadow-[0_18px_50px_rgba(23,32,28,0.06)] dark:border-[#3b3b3b] dark:bg-[#2f2f2f]">
+    <aside className="flex h-full min-h-0 items-center justify-center rounded-[18px] border border-[#d7e5ef]/80 bg-[#f7fbff] px-8 text-center shadow-[0_18px_50px_rgba(23,32,28,0.06)] dark:border-[#3b3b3b] dark:bg-[#2f2f2f]">
         <div>
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#e8f1ea] text-[#5f7f69] dark:bg-[#383838] dark:text-neutral-300">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#eaf4ff] text-[#2f6f9f] dark:bg-[#383838] dark:text-neutral-300">
             <MoreHorizontal className="h-6 w-6" />
           </div>
           <h2 className="text-base font-semibold">选择一个作品</h2>
@@ -2771,8 +2771,8 @@ function DetailPanel({
   const promptClipboardRequest = clipboardRequest?.workId === item.id ? clipboardRequest : null;
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#d8ddd7]/75 bg-[#f7f8f5] shadow-[0_18px_50px_rgba(23,32,28,0.06)] dark:border-[#3b3b3b] dark:bg-[#2f2f2f]">
-      <div className="border-b border-[#dde2dc] bg-[#fbfbf8]/90 px-5 py-4 backdrop-blur dark:border-[#3b3b3b] dark:bg-[#303030]/95">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#d7e5ef]/80 bg-[#f7fbff] shadow-[0_18px_50px_rgba(23,32,28,0.06)] dark:border-[#3b3b3b] dark:bg-[#2f2f2f]">
+      <div className="border-b border-[#d9e7f1] bg-[#fbfbf8]/90 px-5 py-4 backdrop-blur dark:border-[#3b3b3b] dark:bg-[#303030]/95">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-stone-500 dark:text-neutral-400">作品信息</p>
           <p className="mt-1 text-xs text-stone-500 dark:text-neutral-400">{item.status === 'pending' ? '\u5f85\u6574\u7406\u4f5c\u54c1' : '\u5df2\u6574\u7406\u4f5c\u54c1'}</p>
@@ -2780,7 +2780,7 @@ function DetailPanel({
       </div>
 
       <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 pb-8 pt-4">
-        <section className="rounded-[16px] bg-[#eef1ec] p-3 dark:bg-[#292929]">
+        <section className="rounded-[16px] bg-[#eaf4ff] p-3 dark:bg-[#292929]">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-stone-600 dark:text-neutral-400">主图</span>
             <div className="flex items-center gap-1">
@@ -2790,7 +2790,7 @@ function DetailPanel({
             </div>
           </div>
           <div
-            className="group relative h-[330px] overflow-hidden rounded-[14px] bg-[#e4eae5] dark:bg-[#343434]"
+            className="group relative h-[330px] overflow-hidden rounded-[14px] bg-[#e7f1f8] dark:bg-[#343434]"
             onDragOver={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -2807,7 +2807,7 @@ function DetailPanel({
           </div>
 
           <div
-            className="mt-4 border-t border-[#dbe1da]/80 pt-3 outline-none dark:border-[#3f3f3f]"
+            className="mt-4 border-t border-[#d9e7f1]/80 pt-3 outline-none dark:border-[#3f3f3f]"
             data-guide-dropzone="true"
             tabIndex={0}
             onDragOver={(event) => {
@@ -2820,7 +2820,7 @@ function DetailPanel({
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-semibold text-stone-600 dark:text-neutral-400">垫图</span>
                 {(item.referenceImages ?? []).length > 0 && (
-                  <button className="h-7 rounded-lg px-2 text-xs text-stone-400 transition hover:bg-[#e9ece8] hover:text-[#9d5147] dark:text-neutral-500 dark:hover:bg-[#383838] dark:hover:text-[#d9a19a]" onClick={() => onClearGuideImages(item)}>
+                  <button className="h-7 rounded-lg px-2 text-xs text-stone-400 transition hover:bg-[#eaf4ff] hover:text-[#9d5147] dark:text-neutral-500 dark:hover:bg-[#383838] dark:hover:text-[#d9a19a]" onClick={() => onClearGuideImages(item)}>
                     清空
                   </button>
                 )}
@@ -2828,7 +2828,7 @@ function DetailPanel({
             {(item.referenceImages ?? []).length === 0 && (
               <button
                 type="button"
-                className="flex min-h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7ddd6] bg-[#fbfbfa]/35 px-3 text-center text-xs text-stone-400 transition hover:border-[#bfc9bd] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#333333] dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
+                className="flex min-h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7e5ef] bg-[#fbfbfa]/35 px-3 text-center text-xs text-stone-400 transition hover:border-[#a8d2f2] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#333333] dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
                 onClick={onAddGuideImages}
               >
                 {'\u70b9\u51fb\u3001\u62d6\u62fd\u6216 Ctrl+V \u6dfb\u52a0\u57ab\u56fe'}
@@ -2837,7 +2837,7 @@ function DetailPanel({
             {(item.referenceImages ?? []).length > 0 && (
               <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
                 {(item.referenceImages ?? []).map((image) => (
-                  <div key={image.id} className="group relative aspect-square min-w-0 overflow-hidden rounded-[12px] border border-[#d8ddd7] bg-white dark:border-[#494949] dark:bg-[#383838]">
+                  <div key={image.id} className="group relative aspect-square min-w-0 overflow-hidden rounded-[12px] border border-[#d7e5ef] bg-white dark:border-[#494949] dark:bg-[#383838]">
                     <img className="h-full w-full object-cover" src={getImageSrc(image)} alt={image.name ?? '垫图'} />
                     <div className="absolute inset-x-1 bottom-1 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
                       <button className="icon-button h-7 w-7" onClick={() => onCopyGuideImage(image)} aria-label="复制垫图" title="复制垫图">
@@ -2878,7 +2878,7 @@ function DetailPanel({
         <section className="mt-4 space-y-3 px-1">
           <Field label="模型标签">
             <div className="relative" data-model-combobox="true">
-              <div className="flex h-10 items-center rounded-[10px] border border-[#d7ddd6] bg-[#fbfbfa] focus-within:border-[#8faf9b] focus-within:ring-2 focus-within:ring-[#8faf9b]/20 dark:border-[#474747] dark:bg-[#343434] dark:focus-within:border-white/35 dark:focus-within:ring-white/10">
+              <div className="flex h-10 items-center rounded-[10px] border border-[#d7e5ef] bg-[#fbfbfa] focus-within:border-[#a8d2f2] focus-within:ring-2 focus-within:ring-[#7db7e8]/20 dark:border-[#474747] dark:bg-[#343434] dark:focus-within:border-white/35 dark:focus-within:ring-white/10">
                 <input
                   className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-stone-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                   value={modelDraft}
@@ -2898,13 +2898,13 @@ function DetailPanel({
                 </button>
               </div>
               {modelOpen && (
-                <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-md border border-[#d8ddd7] bg-white p-1 shadow-soft dark:border-[#494949] dark:bg-[#363636]">
+                <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-md border border-[#d7e5ef] bg-white p-1 shadow-soft dark:border-[#494949] dark:bg-[#363636]">
                   {modelPresets
                     .filter((tag) => tag.toLowerCase().includes(modelDraft.trim().toLowerCase()))
                     .map((tag) => (
                       <button
                         key={tag}
-                        className="flex h-9 w-full items-center rounded px-2 text-left text-sm text-stone-700 hover:bg-[#eef0ed] dark:text-neutral-200 dark:hover:bg-[#444]"
+                        className="flex h-9 w-full items-center rounded px-2 text-left text-sm text-stone-700 hover:bg-[#eaf4ff] dark:text-neutral-200 dark:hover:bg-[#444]"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
                           onAddModelTag(tag);
@@ -2916,7 +2916,7 @@ function DetailPanel({
                     ))}
                   {modelDraft.trim() && !modelPresets.includes(modelDraft.trim()) && (
                     <button
-                      className="flex h-9 w-full items-center rounded px-2 text-left text-sm text-[#3c6b57] hover:bg-[#eef0ed] dark:text-[#c7c1b6] dark:hover:bg-[#444]"
+                      className="flex h-9 w-full items-center rounded px-2 text-left text-sm text-[#2f6f9f] hover:bg-[#eaf4ff] dark:text-[#c7c1b6] dark:hover:bg-[#444]"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => {
                         onAddModelTag();
@@ -2963,7 +2963,7 @@ function DetailPanel({
           <div className="text-xs text-stone-500 dark:text-neutral-400">创建时间：{formatTime(item.createdAt)}</div>
         </section>
       </div>
-      <div className="border-t border-[#dde2dc] bg-[#fbfbf8]/95 p-4 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
+      <div className="border-t border-[#d9e7f1] bg-[#fbfbf8]/95 p-4 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
           <div className="mb-2 flex items-center gap-2">
           <button className="share-card-primary-button min-w-0 flex-1 justify-center" onClick={() => onOpenShareCard(item)}>
             生成分享卡
@@ -2971,12 +2971,12 @@ function DetailPanel({
           <div className="group relative shrink-0">
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-stone-400 transition hover:bg-[#ecefeb] hover:text-stone-600 focus:bg-[#ecefeb] focus:text-stone-600 focus:outline-none dark:text-neutral-500 dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-200 dark:focus:bg-[#3a3a3a] dark:focus:text-neutral-200"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-stone-400 transition hover:bg-[#eaf4ff] hover:text-stone-600 focus:bg-[#eaf4ff] focus:text-stone-600 focus:outline-none dark:text-neutral-500 dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-200 dark:focus:bg-[#3a3a3a] dark:focus:text-neutral-200"
               aria-label="查看分享卡说明"
             >
               <HelpCircle className="h-4 w-4" />
             </button>
-            <div className="pointer-events-none absolute bottom-11 right-0 z-30 w-[280px] rounded-[12px] border border-[#d7ddd6] bg-[#fbfbfa] p-3 text-left text-xs leading-6 text-stone-600 opacity-0 shadow-[0_18px_42px_rgba(23,32,28,0.13)] transition group-hover:opacity-100 group-focus-within:opacity-100 dark:border-[#464646] dark:bg-[#303030] dark:text-neutral-300 dark:shadow-[0_18px_42px_rgba(0,0,0,0.28)]">
+            <div className="pointer-events-none absolute bottom-11 right-0 z-30 w-[280px] rounded-[12px] border border-[#d7e5ef] bg-[#fbfbfa] p-3 text-left text-xs leading-6 text-stone-600 opacity-0 shadow-[0_18px_42px_rgba(23,32,28,0.13)] transition group-hover:opacity-100 group-focus-within:opacity-100 dark:border-[#464646] dark:bg-[#303030] dark:text-neutral-300 dark:shadow-[0_18px_42px_rgba(0,0,0,0.28)]">
               <p>分享卡会把当前作品的主图、垫图、Prompt 和模型信息整理成一张图片。</p>
               <p className="mt-2">适合用于复盘、分享 AI 生成过程，或整理作品集素材。</p>
               <p className="mt-2">你可以复制为图片，也可以导出为 PNG。</p>
@@ -3004,7 +3004,7 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
 function PreviewExpiredDialog({ onClose }: { onClose: () => void }): JSX.Element {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
+      <div className="w-full max-w-md rounded-[18px] border border-[#d7e5ef] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
         <p className="text-sm leading-6 text-stone-700 dark:text-neutral-200">{expiredPreviewMessage}</p>
         <div className="mt-5 flex justify-end">
           <button className="primary-button" onClick={onClose}>
@@ -3045,7 +3045,7 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
   if (state.type === 'move-work') {
     return (
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
-        <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
+        <div className="w-full max-w-md rounded-[18px] border border-[#d7e5ef] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold">{'\u79fb\u52a8\u4f5c\u54c1\uff1f'}</h2>
@@ -3070,7 +3070,7 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
   if (state.type === 'trace') {
     return (
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
-        <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
+        <div className="w-full max-w-md rounded-[18px] border border-[#d7e5ef] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold">确认删除复迹？</h2>
@@ -3125,7 +3125,7 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md rounded-[18px] border border-[#d8ddd7] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
+      <div className="w-full max-w-md rounded-[18px] border border-[#d7e5ef] bg-[#fbfbf8] p-5 shadow-[0_24px_70px_rgba(23,32,28,0.18)] dark:border-[#484848] dark:bg-[#333] dark:text-neutral-100">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold">{title}</h2>

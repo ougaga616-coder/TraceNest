@@ -23,7 +23,7 @@ type TraceCanvasProps = {
   onBack: () => void;
   onRename: (title: string) => void;
   onCreateTextNode: (x: number, y: number) => string;
-  onPasteTextNode: (source: Pick<TextTraceNode, 'text' | 'width'>, x: number, y: number) => string;
+  onPasteTextNode: (source: Pick<TextTraceNode, 'text' | 'width' | 'height'>, x: number, y: number) => string;
   onCreateImageNodes: (files: File[], x: number, y: number) => Promise<string[]>;
   onPasteImageNode: (file: File, x: number, y: number) => Promise<string | null>;
   onCreateWorkNode: (workId: string, x: number, y: number) => string;
@@ -90,6 +90,7 @@ type ResizeState = {
   startHeight: number;
   padding: number;
   ratio: number;
+  mode: 'aspect' | 'free';
   moved: boolean;
 };
 
@@ -108,6 +109,11 @@ const scaleStep = 0.08;
 const exportPadding = 100;
 const minImageNodeWidth = 120;
 const maxImageNodeWidth = 600;
+const minTextNodeWidth = 160;
+const maxTextNodeWidth = 640;
+const minTextNodeHeight = 72;
+const maxTextNodeHeight = 520;
+const defaultTextNodeHeight = 120;
 const compactWorkDefaultWidth = 280;
 const compactWorkDefaultHeight = 200;
 const imageNodePadding = 6;
@@ -163,7 +169,7 @@ export function TraceCanvas({
   const [dragPreview, setDragPreview] = useState<Record<string, { x: number; y: number }> | null>(null);
   const [resizePreview, setResizePreview] = useState<Record<string, { width: number; height: number }> | null>(null);
   const [selectionBox, setSelectionBox] = useState<SelectionState | null>(null);
-  const [copiedNode, setCopiedNode] = useState<Pick<TextTraceNode, 'text' | 'width' | 'x' | 'y'> | null>(null);
+  const [copiedNode, setCopiedNode] = useState<Pick<TextTraceNode, 'text' | 'width' | 'height' | 'x' | 'y'> | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [viewport, setViewport] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
   const [spacePressed, setSpacePressed] = useState(false);
@@ -264,7 +270,7 @@ export function TraceCanvas({
         const node = canvasNodes.find((item) => item.id === selectedNodeId);
         if (!node || node.type !== 'text') return;
         event.preventDefault();
-        setCopiedNode({ text: node.text, width: node.width, x: node.x, y: node.y });
+        setCopiedNode({ text: node.text, width: node.width, height: node.height, x: node.x, y: node.y });
         return;
       }
 
@@ -356,6 +362,13 @@ export function TraceCanvas({
 
   function clampImageNodeWidth(value: number): number {
     return Math.min(maxImageNodeWidth, Math.max(minImageNodeWidth, value));
+  }
+
+  function clampTextNodeSize(width: number, height: number): { width: number; height: number } {
+    return {
+      width: Math.round(Math.min(maxTextNodeWidth, Math.max(minTextNodeWidth, width))),
+      height: Math.round(Math.min(maxTextNodeHeight, Math.max(minTextNodeHeight, height)))
+    };
   }
 
   function compactWorkSize(node: WorkTraceNode): { width: number; height: number } {
@@ -472,6 +485,15 @@ export function TraceCanvas({
     const preview = dragPreview?.[node.id];
     const size = resizePreview?.[node.id];
     if (!preview && !size) return node;
+    if (node.type === 'text') {
+      return {
+        ...node,
+        x: preview?.x ?? node.x,
+        y: preview?.y ?? node.y,
+        width: size?.width ?? node.width,
+        height: size?.height ?? node.height
+      };
+    }
     return {
       ...node,
       x: preview?.x ?? node.x,
@@ -483,7 +505,7 @@ export function TraceCanvas({
 
   function fallbackHeight(node: CanvasNode): number {
     if (node.type === 'work') return node.height;
-    return node.type === 'image' ? node.height : 96;
+    return node.type === 'image' ? node.height : (node.height ?? defaultTextNodeHeight);
   }
 
   function nodeBox(node: CanvasNode): NodeBox {
@@ -680,9 +702,9 @@ export function TraceCanvas({
       ctx.scale(ratio, ratio);
       ctx.translate(-originX, -originY);
 
-      ctx.fillStyle = dark ? '#272727' : '#edf0ec';
+      ctx.fillStyle = dark ? '#272727' : '#edf5fb';
       ctx.fillRect(originX, originY, width, height);
-      ctx.fillStyle = dark ? 'rgba(214,214,214,0.18)' : 'rgba(100,105,98,0.24)';
+      ctx.fillStyle = dark ? 'rgba(214,214,214,0.18)' : 'rgba(93,130,157,0.22)';
       const gridStartX = Math.floor(originX / gridSize) * gridSize;
       const gridStartY = Math.floor(originY / gridSize) * gridSize;
       for (let x = gridStartX; x <= originX + width; x += gridSize) {
@@ -716,7 +738,7 @@ export function TraceCanvas({
           : dark ? '#333333' : '#fbfbfa';
         ctx.fill();
         ctx.shadowColor = 'transparent';
-        ctx.strokeStyle = dark ? '#505050' : '#d3d8d1';
+        ctx.strokeStyle = dark ? '#505050' : '#d7e5ef';
         ctx.lineWidth = 1;
         ctx.stroke();
 
@@ -726,7 +748,7 @@ export function TraceCanvas({
           ctx.textBaseline = 'top';
           const lineHeight = 24;
           const lines = wrapText(ctx, node.text || '新节点', box.width - 24);
-          lines.forEach((line, index) => {
+          lines.slice(0, Math.max(1, Math.floor((box.height - 24) / lineHeight))).forEach((line, index) => {
             ctx.fillText(line, box.x + 12, box.y + 12 + index * lineHeight);
           });
         } else if (node.type === 'image') {
@@ -745,7 +767,7 @@ export function TraceCanvas({
               await drawContainedImage(ctx, coverSrc, { x: box.x + compactWorkNodePadding, y: box.y + compactWorkNodePadding, width: box.width - compactWorkNodePadding * 2, height: box.height - compactWorkNodePadding * 2 }, 6);
             } else {
               roundedRectPath(ctx, box.x + compactWorkNodePadding, box.y + compactWorkNodePadding, box.width - compactWorkNodePadding * 2, box.height - compactWorkNodePadding * 2, 6);
-              ctx.fillStyle = dark ? '#3b3b3b' : '#eef1ed';
+              ctx.fillStyle = dark ? '#3b3b3b' : '#eef6fb';
               ctx.fill();
             }
             ctx.restore();
@@ -756,7 +778,7 @@ export function TraceCanvas({
             await drawContainedImage(ctx, coverSrc, { x: box.x + 8, y: box.y + 8, width: box.width - 16, height: coverHeight }, 6);
           } else {
             roundedRectPath(ctx, box.x + 8, box.y + 8, box.width - 16, coverHeight, 6);
-            ctx.fillStyle = dark ? '#3b3b3b' : '#eef1ed';
+            ctx.fillStyle = dark ? '#3b3b3b' : '#eef6fb';
             ctx.fill();
           }
           let nextY = box.y + coverHeight + 18;
@@ -766,7 +788,7 @@ export function TraceCanvas({
               const refSrc = resolveWorkImageSrc(image, libraryPath);
               const x = box.x + 10 + index * 68;
               roundedRectPath(ctx, x, nextY, 60, 60, 6);
-              ctx.fillStyle = dark ? '#3a3a3a' : '#eef1ed';
+              ctx.fillStyle = dark ? '#3a3a3a' : '#eef6fb';
               ctx.fill();
               if (refSrc) await drawContainedImage(ctx, refSrc, { x: x + 1, y: nextY + 1, width: 58, height: 58 }, 5);
             }
@@ -1148,9 +1170,10 @@ export function TraceCanvas({
 
   function handleNodeResizePointerDown(
     event: PointerEvent<HTMLButtonElement>,
-    node: ImageTraceNode | WorkTraceNode,
+    node: TextTraceNode | ImageTraceNode | WorkTraceNode,
     size: { width: number; height: number },
-    padding: number
+    padding: number,
+    mode: 'aspect' | 'free' = 'aspect'
   ): void {
     if (spacePressed || isPanning) return;
     event.preventDefault();
@@ -1159,22 +1182,22 @@ export function TraceCanvas({
     event.currentTarget.setPointerCapture(event.pointerId);
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
-    const startWidth = Math.max(minImageNodeWidth, size.width);
-    const startHeight = Math.max(1, size.height);
+    const startSize = mode === 'free' ? clampTextNodeSize(size.width, size.height) : { width: Math.max(minImageNodeWidth, size.width), height: Math.max(1, size.height) };
     const ratio = mediaAspectRatiosRef.current.get(node.id) ?? innerAspectRatio(size, padding);
     resizeRef.current = {
       nodeId: node.id,
       pointerId: event.pointerId,
       startX: point.x,
       startY: point.y,
-      startWidth,
-      startHeight,
+      startWidth: startSize.width,
+      startHeight: startSize.height,
       padding,
       ratio,
+      mode,
       moved: false
     };
     selectNodes([node.id]);
-    setResizePreview({ [node.id]: { width: startWidth, height: startHeight } });
+    setResizePreview({ [node.id]: { width: startSize.width, height: startSize.height } });
   }
 
   function handleNodeResizePointerMove(event: PointerEvent<HTMLButtonElement>): void {
@@ -1184,8 +1207,13 @@ export function TraceCanvas({
     event.stopPropagation();
     const point = canvasPoint(event.clientX, event.clientY);
     if (!point) return;
-    const delta = Math.max(point.x - resize.startX, (point.y - resize.startY) / Math.max(resize.ratio, 0.1));
-    const { width, height } = fitNodeSizeToAspect(resize.startWidth + delta, resize.ratio, resize.padding);
+    const { width, height } = resize.mode === 'free'
+      ? clampTextNodeSize(resize.startWidth + point.x - resize.startX, resize.startHeight + point.y - resize.startY)
+      : fitNodeSizeToAspect(
+          resize.startWidth + Math.max(point.x - resize.startX, (point.y - resize.startY) / Math.max(resize.ratio, 0.1)),
+          resize.ratio,
+          resize.padding
+        );
     resize.moved = resize.moved || Math.abs(point.x - resize.startX) > 3 || Math.abs(point.y - resize.startY) > 3;
     setResizePreview({ [resize.nodeId]: { width, height } });
   }
@@ -1201,8 +1229,13 @@ export function TraceCanvas({
     setResizePreview(null);
     suppressNextNodeClickRef.current = true;
     if (!resize.moved || !point) return;
-    const delta = Math.max(point.x - resize.startX, (point.y - resize.startY) / Math.max(resize.ratio, 0.1));
-    const { width, height } = fitNodeSizeToAspect(resize.startWidth + delta, resize.ratio, resize.padding);
+    const { width, height } = resize.mode === 'free'
+      ? clampTextNodeSize(resize.startWidth + point.x - resize.startX, resize.startHeight + point.y - resize.startY)
+      : fitNodeSizeToAspect(
+          resize.startWidth + Math.max(point.x - resize.startX, (point.y - resize.startY) / Math.max(resize.ratio, 0.1)),
+          resize.ratio,
+          resize.padding
+        );
     onResizeNode(resize.nodeId, width, height);
   }
 
@@ -1290,8 +1323,8 @@ export function TraceCanvas({
   const displayedNodeMap = new Map(displayedNodes.map((node) => [node.id, node]));
 
   return (
-    <section className="relative flex h-full min-h-0 flex-col bg-[#e6eae5] dark:bg-[#252525]">
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d8ddd7]/80 bg-[#f7f8f5]/82 px-6 backdrop-blur dark:border-[#3b3b3b] dark:bg-[#2d2d2d]/88">
+    <section className="relative flex h-full min-h-0 flex-col bg-[#e8f1f8] dark:bg-[#252525]">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d7e5ef]/80 bg-[#f7fbff]/82 px-6 backdrop-blur dark:border-[#3b3b3b] dark:bg-[#2d2d2d]/88">
         <div className="flex min-w-0 items-center gap-3">
           <button className="tool-button h-9 px-2.5" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
@@ -1381,7 +1414,7 @@ export function TraceCanvas({
                   stroke="currentColor"
                   strokeLinecap="round"
                   strokeWidth={selected ? 2.5 : 2}
-                  className={selected ? 'text-stone-500/60 dark:text-neutral-200/50' : 'text-stone-700/20 dark:text-neutral-100/25'}
+                  className={selected ? 'text-[#2f6f9f]/70 dark:text-neutral-200/50' : 'text-stone-700/20 dark:text-neutral-100/25'}
                 />
               </g>
             );
@@ -1394,7 +1427,7 @@ export function TraceCanvas({
               strokeDasharray="5 5"
               strokeLinecap="round"
               strokeWidth="2"
-              className="text-stone-700/28 dark:text-neutral-100/32"
+              className="text-[#2f6f9f]/40 dark:text-neutral-100/32"
             />
           )}
         </svg>
@@ -1408,7 +1441,7 @@ export function TraceCanvas({
 
         {selectionBox?.moved && (
           <div
-            className="pointer-events-none absolute z-30 rounded-[6px] border border-[rgba(0,0,0,0.24)] bg-[rgba(0,0,0,0.08)] dark:border-[rgba(255,255,255,0.34)] dark:bg-[rgba(255,255,255,0.10)]"
+            className="pointer-events-none absolute z-30 rounded-[6px] border border-[#7db7e8]/55 bg-[#7db7e8]/12 dark:border-[rgba(255,255,255,0.34)] dark:bg-[rgba(255,255,255,0.10)]"
             style={{
               left: selectionRect(selectionBox).x,
               top: selectionRect(selectionBox).y,
@@ -1430,6 +1463,7 @@ export function TraceCanvas({
           const isCompactWork = node.type === 'work' && workRefs.length === 0 && !workPrompt && modelTags.length === 0;
           const compactSize = node.type === 'work' && isCompactWork ? compactWorkSize(display as WorkTraceNode) : null;
           const imageSize = node.type === 'image' ? { width: display.width, height: (display as ImageTraceNode).height } : null;
+          const textSize = node.type === 'text' ? { width: display.width, height: (display as TextTraceNode).height ?? defaultTextNodeHeight } : null;
           const fixedSize = imageSize ?? compactSize;
           const imageSrc =
             node.type === 'image'
@@ -1448,16 +1482,16 @@ export function TraceCanvas({
               data-trace-node-id={node.id}
               className={`group absolute z-10 select-none rounded-[8px] border bg-[#fbfbfa] p-3 text-sm leading-6 transition-colors dark:bg-[#333] ${
                 connection?.targetNodeId === node.id
-                  ? 'border-[rgba(0,0,0,0.34)] shadow-[0_18px_36px_rgba(23,32,28,0.15)] ring-2 ring-[rgba(0,0,0,0.10)] dark:border-[rgba(255,255,255,0.48)] dark:shadow-[0_18px_36px_rgba(0,0,0,0.3)] dark:ring-2 dark:ring-[rgba(255,255,255,0.10)]'
+                  ? 'border-[#7db7e8] shadow-[0_18px_36px_rgba(23,32,28,0.15)] ring-2 ring-[#7db7e8]/20 dark:border-[rgba(255,255,255,0.48)] dark:shadow-[0_18px_36px_rgba(0,0,0,0.3)] dark:ring-2 dark:ring-[rgba(255,255,255,0.10)]'
                   : isSelected
-                    ? 'border-[rgba(0,0,0,0.28)] shadow-[0_16px_34px_rgba(23,32,28,0.14)] ring-1 ring-[rgba(0,0,0,0.12)] dark:border-[rgba(255,255,255,0.38)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.28)] dark:ring-1 dark:ring-[rgba(255,255,255,0.08)]'
-                    : 'border-[#d3d8d1] shadow-[0_12px_28px_rgba(23,32,28,0.08)] dark:border-[#505050] dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]'
+                    ? 'border-[#a8d2f2] shadow-[0_16px_34px_rgba(23,32,28,0.14)] ring-1 ring-[#7db7e8]/20 dark:border-[rgba(255,255,255,0.38)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.28)] dark:ring-1 dark:ring-[rgba(255,255,255,0.08)]'
+                    : 'border-[#d7e5ef] shadow-[0_12px_28px_rgba(23,32,28,0.08)] dark:border-[#505050] dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]'
               } ${node.type === 'image' ? 'trace-image-node p-1.5' : ''} ${node.type === 'work' ? `trace-work-node overflow-visible p-2 ${isCompactWork ? 'is-compact' : ''}` : ''}`}
               style={{
                 left: display.x,
                 top: display.y,
                 width: node.type === 'work' ? (isCompactWork ? compactSize?.width : Math.max(display.width, 440)) : display.width,
-                height: fixedSize?.height
+                height: fixedSize?.height ?? textSize?.height
               }}
               onPointerDown={(event) => handleNodePointerDown(event, node)}
               onPointerMove={handleNodePointerMove}
@@ -1477,7 +1511,7 @@ export function TraceCanvas({
             >
               {node.type === 'text' && isEditing ? (
                 <textarea
-                  className="min-h-[72px] w-full resize-none border-0 bg-transparent text-sm leading-6 text-stone-800 outline-none placeholder:text-stone-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                  className="h-full min-h-[72px] w-full resize-none border-0 bg-transparent text-sm leading-6 text-stone-800 outline-none placeholder:text-stone-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                   autoFocus
                   value={nodeDraft}
                   placeholder="输入内容"
@@ -1488,7 +1522,7 @@ export function TraceCanvas({
               ) : (
                 <>
                   {node.type === 'text' ? (
-                    <div className="relative">
+                    <div className="relative h-full overflow-hidden">
                       <button
                         type="button"
                         className={`trace-text-toggle ${(node.collapsed ?? false) ? 'is-visible' : ''}`}
@@ -1553,7 +1587,7 @@ export function TraceCanvas({
                   )}
                   <button
                     type="button"
-                    className={`absolute -right-3 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[rgba(0,0,0,0.18)] bg-[#f4f4f4] text-stone-600 shadow-[0_6px_16px_rgba(23,32,28,0.12)] transition hover:bg-white dark:border-[rgba(255,255,255,0.22)] dark:bg-[#dedede] dark:text-[#222] dark:shadow-[0_6px_16px_rgba(0,0,0,0.22)] ${
+                    className={`absolute -right-3 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[#a8d2f2] bg-[#eaf4ff] text-[#2f6f9f] shadow-[0_6px_16px_rgba(23,32,28,0.12)] transition hover:bg-white dark:border-[rgba(255,255,255,0.22)] dark:bg-[#dedede] dark:text-[#222] dark:shadow-[0_6px_16px_rgba(0,0,0,0.22)] ${
                       isSelected || connection?.fromNodeId === node.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                     }`}
                     aria-label="创建连接"
@@ -1566,6 +1600,27 @@ export function TraceCanvas({
                   >
                     +
                   </button>
+                  {textSize && isSelected && !isEditing && (
+                    <button
+                      type="button"
+                      className="trace-text-resize-handle"
+                      aria-label="调整文字节点大小"
+                      title="调整文字节点大小"
+                      onPointerDown={(event) =>
+                        handleNodeResizePointerDown(
+                          event,
+                          node as TextTraceNode,
+                          textSize,
+                          0,
+                          'free'
+                        )
+                      }
+                      onPointerMove={handleNodeResizePointerMove}
+                      onPointerUp={handleNodeResizePointerUp}
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                    />
+                  )}
                   {fixedSize && (node.type === 'image' || isCompactWork) && isSelected && !isEditing && (
                     <button
                       type="button"
@@ -1640,7 +1695,7 @@ export function TraceCanvas({
                         className="group overflow-hidden rounded-[10px] border border-black/10 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-black/18 hover:shadow-[0_14px_30px_rgba(23,32,28,0.14)] dark:border-white/10 dark:bg-[#272727] dark:hover:border-white/20 dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.28)]"
                         onClick={() => insertWorkNode(work.id)}
                       >
-                        <div className="aspect-[4/3] bg-[#eef1ed] dark:bg-[#3a3a3a]">
+                        <div className="aspect-[4/3] bg-[#eef6fb] dark:bg-[#3a3a3a]">
                           {coverSrc ? (
                             <img className="h-full w-full object-contain" src={coverSrc} alt={workTitle(work)} loading="lazy" />
                           ) : (

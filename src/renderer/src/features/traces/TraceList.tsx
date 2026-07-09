@@ -37,7 +37,7 @@ export function TraceList({
   onDeleteTrace
 }: TraceListProps): JSX.Element {
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-y-auto bg-[#e6eae5] px-7 py-6 dark:bg-[#252525]">
+    <section className="flex h-full min-h-0 flex-col overflow-y-auto bg-[#e8f1f8] px-7 py-6 dark:bg-[#252525]">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -45,16 +45,17 @@ export function TraceList({
             <div className="group relative">
               <button
                 type="button"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-stone-400 transition hover:bg-[#dce2dc] hover:text-stone-600 focus:bg-[#dce2dc] focus:text-stone-600 focus:outline-none dark:text-neutral-500 dark:hover:bg-[#393939] dark:hover:text-neutral-200 dark:focus:bg-[#393939] dark:focus:text-neutral-200"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-stone-400 transition hover:bg-[#d8ecff] hover:text-stone-600 focus:bg-[#d8ecff] focus:text-stone-600 focus:outline-none dark:text-neutral-500 dark:hover:bg-[#393939] dark:hover:text-neutral-200 dark:focus:bg-[#393939] dark:focus:text-neutral-200"
                 aria-label="查看创作复迹操作方法"
               >
                 <HelpCircle className="h-4 w-4" />
               </button>
-              <div className="pointer-events-none absolute left-0 top-8 z-30 w-[300px] rounded-[12px] border border-[#d7ddd6] bg-[#fbfbfa] p-3 text-left text-xs leading-6 text-stone-600 opacity-0 shadow-[0_18px_42px_rgba(23,32,28,0.13)] transition group-hover:opacity-100 group-focus-within:opacity-100 dark:border-[#464646] dark:bg-[#303030] dark:text-neutral-300 dark:shadow-[0_18px_42px_rgba(0,0,0,0.28)]">
+              <div className="pointer-events-none absolute left-0 top-8 z-30 w-[300px] rounded-[12px] border border-[#d7e5ef] bg-[#fbfbfa] p-3 text-left text-xs leading-6 text-stone-600 opacity-0 shadow-[0_18px_42px_rgba(23,32,28,0.13)] transition group-hover:opacity-100 group-focus-within:opacity-100 dark:border-[#464646] dark:bg-[#303030] dark:text-neutral-300 dark:shadow-[0_18px_42px_rgba(0,0,0,0.28)]">
                 <p>双击空白处：新建文字节点</p>
                 <p>拖入图片：添加图片节点</p>
                 <p>插入作品：添加作品节点</p>
                 <p>拖拽文本节点右侧加号：创建连接线</p>
+                <p>拖拽文字节点右下角控制点：调整文字节点大小</p>
                 <p>拖拽图片节点右侧圆点：进行节点缩放</p>
                 <p>框选拖拽：多选并移动节点</p>
                 <p>Ctrl+Z：撤回</p>
@@ -78,7 +79,7 @@ export function TraceList({
       {traces.length === 0 ? (
         <div className="flex min-h-[520px] items-center justify-center">
           <div className="w-full max-w-md px-8 py-10 text-center">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[16px] bg-[#e8f1ea] text-[#5f7f69] dark:bg-[#383838] dark:text-neutral-300">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[16px] bg-[#eaf4ff] text-[#2f6f9f] dark:bg-[#383838] dark:text-neutral-300">
               <GitBranch className="h-7 w-7" />
             </div>
             <h3 className="text-lg font-semibold tracking-[-0.01em]">还没有创作复迹</h3>
@@ -98,11 +99,11 @@ export function TraceList({
             return (
               <article
                 key={trace.id}
-                className="group flex min-h-[164px] flex-col rounded-[8px] border border-[#d8ddd7]/85 bg-[#fbfbfa] p-4 shadow-[0_12px_30px_rgba(23,32,28,0.05)] transition hover:-translate-y-0.5 hover:border-[#c7d0c5] hover:bg-white dark:border-[#3f3f3f] dark:bg-[#303030] dark:shadow-none dark:hover:border-[#565656] dark:hover:bg-[#343434]"
+                className="group flex min-h-[164px] flex-col rounded-[8px] border border-[#d7e5ef]/85 bg-[#fbfbfa] p-4 shadow-[0_12px_30px_rgba(23,32,28,0.05)] transition hover:-translate-y-0.5 hover:border-[#a8d2f2] hover:bg-white dark:border-[#3f3f3f] dark:bg-[#303030] dark:shadow-none dark:hover:border-[#565656] dark:hover:bg-[#343434]"
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <button className="min-w-0 flex-1 text-left" onClick={() => onOpenTrace(trace.id)}>
-                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#eef1ec] text-[#5f7f69] dark:bg-[#3a3a3a] dark:text-neutral-300">
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#eaf4ff] text-[#2f6f9f] dark:bg-[#3a3a3a] dark:text-neutral-300">
                       <GitBranch className="h-5 w-5" />
                     </div>
                   </button>

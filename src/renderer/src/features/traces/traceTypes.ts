@@ -76,7 +76,7 @@ export function createCenterNode(title: string): TraceNode {
   };
 }
 
-export function createTextNode(x: number, y: number, text = '', width = 240): TextTraceNode {
+export function createTextNode(x: number, y: number, text = '', width = 240, height = 120): TextTraceNode {
   const timestamp = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
@@ -84,6 +84,7 @@ export function createTextNode(x: number, y: number, text = '', width = 240): Te
     x,
     y,
     width,
+    height,
     text,
     collapsed: false,
     createdAt: timestamp,

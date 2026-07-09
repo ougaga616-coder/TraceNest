@@ -96,8 +96,8 @@ export function PostImportInfoModal({
         if (event.target === event.currentTarget) onSkip();
       }}
     >
-      <div className="flex max-h-[84vh] w-full max-w-[800px] flex-col overflow-hidden rounded-[20px] border border-[#d8ddd7] bg-[#fbfbf8] shadow-[0_28px_80px_rgba(23,32,28,0.22)] dark:border-[#484848] dark:bg-[#303030] dark:text-neutral-100">
-        <div className="flex items-start justify-between gap-4 border-b border-[#dde2dc] px-5 py-3.5 dark:border-[#3b3b3b]">
+      <div className="flex max-h-[84vh] w-full max-w-[800px] flex-col overflow-hidden rounded-[20px] border border-[#d7e5ef] bg-[#fbfbf8] shadow-[0_28px_80px_rgba(23,32,28,0.22)] dark:border-[#484848] dark:bg-[#303030] dark:text-neutral-100">
+        <div className="flex items-start justify-between gap-4 border-b border-[#d9e7f1] px-5 py-3.5 dark:border-[#3b3b3b]">
           <div>
             <h2 className="text-base font-semibold">{'\u8865\u5145\u4f5c\u54c1\u4fe1\u606f'}</h2>
             <p className="mt-1 text-sm text-stone-500 dark:text-neutral-400">
@@ -112,7 +112,7 @@ export function PostImportInfoModal({
         <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-5 py-4">
           <section>
             <div className="mb-2 text-xs font-semibold text-stone-600 dark:text-neutral-400">{'\u4e3b\u56fe\u9884\u89c8'}</div>
-            <div className="h-[176px] overflow-hidden rounded-[16px] bg-[#eef1ec] p-2 dark:bg-[#262626]">
+            <div className="h-[176px] overflow-hidden rounded-[16px] bg-[#eaf4ff] p-2 dark:bg-[#262626]">
               {coverSrc ? (
                 <img className="h-full w-full rounded-[12px] object-contain" src={coverSrc} alt="imported work" />
               ) : (
@@ -133,7 +133,7 @@ export function PostImportInfoModal({
             {(item.referenceImages ?? []).length === 0 ? (
               <button
                 type="button"
-                className="flex h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7ddd6] bg-[#eef1ec]/45 px-3 text-center text-xs text-stone-400 transition hover:border-[#bfc9bd] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#383838]/45 dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
+                className="flex h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7e5ef] bg-[#eaf4ff]/55 px-3 text-center text-xs text-stone-400 transition hover:border-[#a8d2f2] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#383838]/45 dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
                 onClick={() => void onAddGuideImages()}
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -153,7 +153,7 @@ export function PostImportInfoModal({
                 onDrop={(event) => void onGuideDrop(event)}
               >
                 {(item.referenceImages ?? []).map((image) => (
-                  <div key={image.id} className="group relative h-24 w-24 overflow-hidden rounded-[12px] border border-[#d8ddd7] bg-white dark:border-[#494949] dark:bg-[#383838]">
+                  <div key={image.id} className="group relative h-24 w-24 overflow-hidden rounded-[12px] border border-[#d7e5ef] bg-white dark:border-[#494949] dark:bg-[#383838]">
                     <img className="h-full w-full object-cover" src={getImageSrc(image)} alt={image.name ?? 'guide'} />
                     <button
                       className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-stone-950/45 text-white opacity-0 transition hover:bg-[#8f3f39] group-hover:opacity-100"
@@ -181,12 +181,12 @@ export function PostImportInfoModal({
 
           <section>
             <label className="field-label dark:text-neutral-400">{'\u6a21\u578b\u6807\u7b7e'}</label>
-            <div className="rounded-[12px] border border-[#d7ddd6] bg-[#fbfbfa] p-2 transition focus-within:border-[#8faf9b] focus-within:ring-2 focus-within:ring-[#8faf9b]/20 dark:border-[#484848] dark:bg-[#343434] dark:focus-within:border-white/35 dark:focus-within:ring-white/10">
+            <div className="rounded-[12px] border border-[#d7e5ef] bg-[#fbfbfa] p-2 transition focus-within:border-[#a8d2f2] focus-within:ring-2 focus-within:ring-[#7db7e8]/20 dark:border-[#484848] dark:bg-[#343434] dark:focus-within:border-white/35 dark:focus-within:ring-white/10">
               <div className="flex flex-wrap items-center gap-2">
                 {modelTags.map((tag) => (
                   <button
                     key={tag}
-                    className="inline-flex h-8 items-center gap-1 rounded-[9px] border border-[#d7ddd6] bg-[#eef1ec] px-2.5 text-xs font-medium text-stone-700 transition hover:border-[#c4ccc2] hover:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                    className="inline-flex h-8 items-center gap-1 rounded-[9px] border border-[#d7e5ef] bg-[#eaf4ff] px-2.5 text-xs font-medium text-stone-700 transition hover:border-[#a8d2f2] hover:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                     onClick={() => removeModelTag(tag)}
                   >
                     {tag}
@@ -222,7 +222,7 @@ export function PostImportInfoModal({
           </section>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#dde2dc] bg-[#fbfbf8]/95 px-5 py-3 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
+        <div className="flex justify-end gap-2 border-t border-[#d9e7f1] bg-[#fbfbf8]/95 px-5 py-3 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
           <button className="tool-button h-9 px-4" onClick={onSkip}>{'\u8df3\u8fc7'}</button>
           <button className="primary-button h-9 px-4" onClick={() => void onSave({ prompt, modelTags: modelTagsForSave(), collectionId: collectionId || undefined })}>
             <Check className="h-4 w-4" />
