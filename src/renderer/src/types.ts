@@ -37,11 +37,16 @@ export type PicFlowCase = {
   promptCn?: string;
   promptEn?: string;
   note?: string;
+  deletedAt?: string | null;
+  deletedFromCollectionId?: string | null;
 };
 
 export type PicFlowCollection = {
   id: string;
   name: string;
+  parentId?: string | null;
+  deletedAt?: string | null;
+  deletedParentId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +79,7 @@ export type PicFlowTextTraceNode = PicFlowBaseTraceNode & {
   type: 'text';
   height?: number;
   text: string;
+  collapsed?: boolean;
   createdAt: string;
   updatedAt: string;
 };

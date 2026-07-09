@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   Copy,
   Folder,
   GitBranch,
@@ -12,11 +13,12 @@ import {
   Database,
   MoreHorizontal,
   Plus,
+  RotateCcw,
   Trash2,
   Upload,
   X
 } from 'lucide-react';
-import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardEvent as ReactClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AppTitlebar } from './components/AppTitlebar';
 import { ClipboardPromptConfirm } from './components/ClipboardPromptConfirm';
 import { PostImportInfoModal, type PostImportInfoPayload } from './components/PostImportInfoModal';
@@ -25,7 +27,7 @@ import { Toast } from './components/Toast';
 import { TraceCanvas } from './features/traces/TraceCanvas';
 import { TraceList } from './features/traces/TraceList';
 import { fallbackTraceApi } from './features/traces/traceStorage';
-import { createImageNode, createTextNode, createTrace, createTraceEdge, createWorkNode, deleteTraceEdge, deleteTraceNode, emptyTraceData, moveTraceNode, nextDefaultTraceTitle, renameTrace, updateTraceTextNode, type CreativeTrace, type ImageTraceNode, type TextTraceNode, type TraceData } from './features/traces/traceTypes';
+import { createImageNode, createTextNode, createTrace, createTraceEdge, createWorkNode, deleteTraceEdge, deleteTraceNode, emptyTraceData, moveTraceNode, nextDefaultTraceTitle, renameTrace, toggleTraceTextNodeCollapsed, updateTraceTextNode, type CreativeTrace, type ImageTraceNode, type TextTraceNode, type TraceData } from './features/traces/traceTypes';
 import { useSmartClipboard } from './hooks/useSmartClipboard';
 import type { PicFlowCase, PicFlowClipboardApi, PicFlowCollection, PicFlowData, PicFlowImage, PicFlowLibraryApi, PicFlowLibraryState } from './types';
 import { resolveWorkImageSrc } from './utils/imageDisplay';
@@ -33,7 +35,7 @@ import { buildWorkSummaryText, copyTextToClipboard, formatModelTagsForCopy } fro
 import { filterWorksByQuery } from './utils/workSearch';
 import { updateWork } from './utils/workUpdates';
 
-type ViewKey = 'all' | 'pending' | 'favorites' | 'traces' | `collection:${string}`;
+type ViewKey = 'all' | 'pending' | 'favorites' | 'trash' | 'traces' | `collection:${string}`;
 type TraceHistory = {
   undo: CreativeTrace[];
   redo: CreativeTrace[];
@@ -46,7 +48,9 @@ type ClipboardImageRequest = {
 };
 type ConfirmState =
   | { type: 'case'; id: string; title: string }
-  | { type: 'collection'; id: string; name: string }
+  | { type: 'collection'; id: string; name: string; hasContents?: boolean }
+  | { type: 'permanent-case'; id: string; title: string }
+  | { type: 'permanent-collection'; id: string; name: string }
   | { type: 'trace'; id: string; title: string }
   | { type: 'clear-guides'; caseId: string; title: string }
   | { type: 'replace-main'; caseId: string; images: PicFlowImage[] }
@@ -194,7 +198,40 @@ function createCase(partial: Partial<PicFlowCase> = {}): PicFlowCase {
     capturedAt: partial.capturedAt ?? timestamp,
     createdAt: partial.createdAt ?? timestamp,
     updatedAt: partial.updatedAt ?? timestamp,
-    prompt: partial.prompt ?? ''
+    prompt: partial.prompt ?? '',
+    deletedAt: partial.deletedAt ?? null,
+    deletedFromCollectionId: partial.deletedFromCollectionId ?? null
+  };
+}
+
+function normalizeAppData(data: PicFlowData): PicFlowData {
+  return {
+    ...data,
+    cases: (data.cases ?? []).map((item) => ({
+      ...item,
+      referenceImages: item.referenceImages ?? [],
+      favorite: item.favorite ?? false,
+      hidden: item.hidden ?? false,
+      deletedAt: item.deletedAt ?? null,
+      deletedFromCollectionId: item.deletedFromCollectionId ?? null
+    })),
+    collections: (data.collections ?? []).map((item) => ({
+      ...item,
+      parentId: item.parentId ?? null,
+      deletedAt: item.deletedAt ?? null,
+      deletedParentId: item.deletedParentId ?? null
+    })),
+    settings: { ...emptyData.settings, ...data.settings }
+  };
+}
+
+function normalizeTraceDataForApp(data: TraceData): TraceData {
+  return {
+    traces: (data.traces ?? []).map((trace) => ({
+      ...trace,
+      nodes: (trace.nodes ?? []).map((node) => (node.type === 'text' ? { ...node, collapsed: node.collapsed ?? false } : node)),
+      edges: trace.edges ?? []
+    }))
   };
 }
 
@@ -225,6 +262,7 @@ function viewTitle(view: ViewKey, collections: PicFlowCollection[]): string {
   if (view === 'all') return '全部作品';
   if (view === 'pending') return '\u5f85\u6574\u7406';
   if (view === 'favorites') return '我的收藏';
+  if (view === 'trash') return '回收站';
   if (view === 'traces') return '创作复迹';
   const collection = collections.find((item) => item.id === view.replace('collection:', ''));
   return collection?.name ?? '灵感图集';
@@ -277,6 +315,8 @@ export default function App(): JSX.Element {
   const [toast, setToast] = useState('');
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [editingCollectionName, setEditingCollectionName] = useState('');
+  const [expandedCollectionIds, setExpandedCollectionIds] = useState<string[]>([]);
+  const [collectionMenu, setCollectionMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [modelDraft, setModelDraft] = useState('');
   const [modelOpen, setModelOpen] = useState(false);
@@ -512,6 +552,7 @@ export default function App(): JSX.Element {
       const target = event.target as HTMLElement | null;
       if (!target?.closest('[data-model-combobox="true"]')) setModelOpen(false);
       if (!target?.closest('[data-library-menu="true"]')) setLibraryMenuOpen(false);
+      if (!target?.closest('[data-collection-menu="true"]')) setCollectionMenu(null);
     };
     window.addEventListener('pointerdown', onPointerDown);
     return () => window.removeEventListener('pointerdown', onPointerDown);
@@ -519,18 +560,18 @@ export default function App(): JSX.Element {
 
   const counts = useMemo(
     () => ({
-      all: data.cases.length,
-      pending: data.cases.filter((item) => item.status === 'pending').length,
-      favorites: data.cases.filter((item) => item.favorite).length
+      all: data.cases.filter((item) => !item.deletedAt).length,
+      pending: data.cases.filter((item) => !item.deletedAt && item.status === 'pending').length,
+      favorites: data.cases.filter((item) => !item.deletedAt && item.favorite).length
     }),
     [data.cases]
   );
 
   const visibleCases = useMemo(() => {
-    let scoped = data.cases;
+    let scoped = activeView === 'trash' ? data.cases.filter((item) => item.deletedAt) : data.cases.filter((item) => !item.deletedAt);
     if (activeView === 'pending') scoped = scoped.filter((item) => item.status === 'pending');
     if (activeView === 'favorites') scoped = scoped.filter((item) => item.favorite);
-    if (activeView === 'all') scoped = data.cases;
+    if (activeView === 'all') scoped = data.cases.filter((item) => !item.deletedAt);
     if (activeView.startsWith('collection:')) {
       const collectionId = activeView.replace('collection:', '');
       scoped = scoped.filter((item) => item.collectionId === collectionId);
@@ -612,8 +653,8 @@ export default function App(): JSX.Element {
 
     if (reason === 'refresh') console.info('[library refresh] applying state...');
     suppressSaveRef.current = true;
-    const nextData = result.data;
-    const nextTraceData = await picflowApi.loadTraces();
+    const nextData = normalizeAppData(result.data);
+    const nextTraceData = normalizeTraceDataForApp(await picflowApi.loadTraces());
     setData(nextData);
     setTraceData(nextTraceData);
     setDarkMode(nextData.settings?.theme === 'dark');
@@ -630,7 +671,7 @@ export default function App(): JSX.Element {
       setActiveView((current) => {
         if (!current.startsWith('collection:')) return current;
         const collectionId = current.replace('collection:', '');
-        return nextData.collections.some((item) => item.id === collectionId) ? current : 'all';
+        return nextData.collections.some((item) => item.id === collectionId && !item.deletedAt) ? current : 'all';
       });
     }
     setLoaded(true);
@@ -872,6 +913,11 @@ export default function App(): JSX.Element {
         if (currentNode.type === 'text' && currentNode.text === text) return trace;
         return updateTraceTextNode(trace, nodeId, text);
       });
+  }
+
+  function toggleTextNodeCollapsedInSelectedTrace(nodeId: string): void {
+    if (!canUseWriteFeatures()) return;
+    commitSelectedTraceChange((trace) => toggleTraceTextNodeCollapsed(trace, nodeId));
   }
 
   function moveNodeInSelectedTrace(nodeId: string, x: number, y: number): void {
@@ -1392,6 +1438,18 @@ export default function App(): JSX.Element {
     }
   }
 
+  async function handleClipboardDraftGuideDrop(event: DragEvent<HTMLElement>): Promise<void> {
+    if (!clipboardImportDraft) return;
+    const images = await importDroppedImages(event, 'reference');
+    if (!images.length) return;
+    setClipboardImportDraft((current) =>
+      current
+        ? { ...current, referenceImages: [...(current.referenceImages ?? []), ...images], updatedAt: nowIso() }
+        : current
+    );
+    setToast('已添加垫图');
+  }
+
   function removeClipboardDraftGuideImage(_caseId: string, imageId: string): void {
     if (!canUseWriteFeatures()) return;
     setClipboardImportDraft((current) =>
@@ -1546,14 +1604,45 @@ export default function App(): JSX.Element {
     requestMoveWorkToCollection(workId, collection.id);
   }
 
-  function addCollection(): void {
+  function addCollection(parentId: string | null = null): void {
     if (!canUseWriteFeatures()) return;
     const timestamp = nowIso();
-    const collection: PicFlowCollection = { id: newId(), name: '新建图集', createdAt: timestamp, updatedAt: timestamp };
+    const collection: PicFlowCollection = { id: newId(), name: '新建图集', parentId, deletedAt: null, deletedParentId: null, createdAt: timestamp, updatedAt: timestamp };
     setData((current) => ({ ...current, collections: [...current.collections, collection] }));
     setActiveView(`collection:${collection.id}`);
     setEditingCollectionId(collection.id);
     setEditingCollectionName(collection.name);
+    if (parentId) setExpandedCollectionIds((current) => (current.includes(parentId) ? current : [...current, parentId]));
+    setCollectionMenu(null);
+    setToast(parentId ? '已新建子文件夹' : '已新建图集');
+  }
+
+  function collectionDescendantIds(collectionId: string, collections = data.collections): string[] {
+    const children = collections.filter((item) => !item.deletedAt && item.parentId === collectionId);
+    return children.flatMap((child) => [child.id, ...collectionDescendantIds(child.id, collections)]);
+  }
+
+  function allCollectionDescendantIds(collectionId: string, collections = data.collections): string[] {
+    const children = collections.filter((item) => item.parentId === collectionId || item.deletedParentId === collectionId);
+    return children.flatMap((child) => [child.id, ...allCollectionDescendantIds(child.id, collections)]);
+  }
+
+  function collectionHasChildrenOrWorks(collectionId: string): boolean {
+    const ids = new Set([collectionId, ...collectionDescendantIds(collectionId)]);
+    return data.collections.some((item) => !item.deletedAt && item.parentId === collectionId) ||
+      data.cases.some((item) => !item.deletedAt && item.collectionId && ids.has(item.collectionId));
+  }
+
+  function toggleCollectionExpanded(collectionId: string): void {
+    setExpandedCollectionIds((current) =>
+      current.includes(collectionId) ? current.filter((id) => id !== collectionId) : [...current, collectionId]
+    );
+  }
+
+  function openCollectionMenu(event: ReactMouseEvent<HTMLElement>, collection: PicFlowCollection): void {
+    event.preventDefault();
+    event.stopPropagation();
+    setCollectionMenu({ id: collection.id, x: event.clientX, y: event.clientY });
   }
 
   function startRenameCollection(collection: PicFlowCollection): void {
@@ -1581,6 +1670,110 @@ export default function App(): JSX.Element {
     setEditingCollectionName('');
   }
 
+  function moveCaseToTrash(caseId: string): void {
+    const timestamp = nowIso();
+    const nextData = {
+      ...data,
+      cases: data.cases.map((item) =>
+        item.id === caseId
+          ? { ...item, deletedAt: timestamp, deletedFromCollectionId: item.collectionId ?? null, updatedAt: timestamp }
+          : item
+      )
+    };
+    const activeCases = data.cases.filter((item) => !item.deletedAt);
+    persist(nextData);
+    setSelectedId(selectedId === caseId ? nextAfterDelete(activeCases, caseId) : selectedId);
+    setToast('已移入回收站');
+  }
+
+  function moveCollectionToTrash(collectionId: string): void {
+    const timestamp = nowIso();
+    const trashedIds = new Set([collectionId, ...collectionDescendantIds(collectionId)]);
+    const nextData = {
+      ...data,
+      collections: data.collections.map((item) =>
+        trashedIds.has(item.id)
+          ? { ...item, deletedAt: timestamp, deletedParentId: item.parentId ?? null, updatedAt: timestamp }
+          : item
+      ),
+      cases: data.cases.map((item) =>
+        item.collectionId && trashedIds.has(item.collectionId) && !item.deletedAt
+          ? { ...item, deletedAt: timestamp, deletedFromCollectionId: item.collectionId, updatedAt: timestamp }
+          : item
+      )
+    };
+    persist(nextData);
+    if (activeView === `collection:${collectionId}` || (activeView.startsWith('collection:') && trashedIds.has(activeView.replace('collection:', '')))) {
+      setActiveView('all');
+    }
+    setSelectedId(null);
+    setCollectionMenu(null);
+    setToast('已移入回收站');
+  }
+
+  function restoreCase(caseId: string): void {
+    const work = data.cases.find((item) => item.id === caseId);
+    if (!work) return;
+    const originalCollectionId = work.deletedFromCollectionId ?? work.collectionId;
+    const collectionExists = originalCollectionId ? data.collections.some((item) => item.id === originalCollectionId && !item.deletedAt) : false;
+    const timestamp = nowIso();
+    const nextCollectionId = collectionExists ? originalCollectionId ?? undefined : undefined;
+    persist({
+      ...data,
+      cases: data.cases.map((item) =>
+        item.id === caseId
+          ? { ...item, deletedAt: null, deletedFromCollectionId: null, collectionId: nextCollectionId, updatedAt: timestamp }
+          : item
+      )
+    });
+    setToast(collectionExists || !originalCollectionId ? '已恢复作品' : '已恢复作品，原文件夹不存在，已放入未分类');
+  }
+
+  function restoreCollection(collectionId: string): void {
+    const timestamp = nowIso();
+    const ids = new Set([collectionId, ...data.collections.filter((item) => item.deletedAt).flatMap((item) => {
+      const chain: string[] = [];
+      let parentId = item.deletedParentId ?? item.parentId ?? null;
+      while (parentId) {
+        chain.push(parentId);
+        parentId = data.collections.find((candidate) => candidate.id === parentId)?.deletedParentId ?? null;
+      }
+      return chain.includes(collectionId) ? [item.id] : [];
+    })]);
+    const nextData = {
+      ...data,
+      collections: data.collections.map((item) => {
+        if (!ids.has(item.id)) return item;
+        const parentId = item.deletedParentId ?? item.parentId ?? null;
+        const parentAvailable = !parentId || data.collections.some((candidate) => candidate.id === parentId && !candidate.deletedAt);
+        return { ...item, deletedAt: null, deletedParentId: null, parentId: parentAvailable ? parentId : null, updatedAt: timestamp };
+      }),
+      cases: data.cases.map((item) =>
+        item.deletedAt && item.deletedFromCollectionId && ids.has(item.deletedFromCollectionId)
+          ? { ...item, deletedAt: null, deletedFromCollectionId: null, collectionId: item.deletedFromCollectionId, updatedAt: timestamp }
+          : item
+      )
+    };
+    persist(nextData);
+    setToast('已恢复文件夹');
+  }
+
+  function permanentlyDeleteCase(caseId: string): void {
+    persist({ ...data, cases: data.cases.filter((item) => item.id !== caseId) });
+    if (selectedId === caseId) setSelectedId(null);
+    setToast('已永久删除');
+  }
+
+  function permanentlyDeleteCollection(collectionId: string): void {
+    const ids = new Set([collectionId, ...allCollectionDescendantIds(collectionId)]);
+    persist({
+      ...data,
+      collections: data.collections.filter((item) => !ids.has(item.id)),
+      cases: data.cases.filter((item) => !(item.deletedAt && item.deletedFromCollectionId && ids.has(item.deletedFromCollectionId)))
+    });
+    setToast('已永久删除');
+  }
+
   async function deleteConfirmed(): Promise<void> {
     if (!confirmState) return;
     if (!canUseWriteFeatures()) {
@@ -1588,23 +1781,24 @@ export default function App(): JSX.Element {
       return;
     }
     if (confirmState.type === 'case') {
-      const nextData = { ...data, cases: data.cases.filter((item) => item.id !== confirmState.id) };
-      const nextSelectedId = selectedId === confirmState.id ? nextAfterDelete(data.cases, confirmState.id) : selectedId;
-      persist(nextData);
-      setSelectedId(nextSelectedId);
-      setToast('已删除作品');
+      moveCaseToTrash(confirmState.id);
+      setConfirmState(null);
+      return;
+    }
+    if (confirmState.type === 'permanent-case') {
+      permanentlyDeleteCase(confirmState.id);
+      setConfirmState(null);
+      return;
+    }
+    if (confirmState.type === 'permanent-collection') {
+      permanentlyDeleteCollection(confirmState.id);
+      setConfirmState(null);
+      return;
     }
     if (confirmState.type === 'collection') {
-      const nextData = {
-        ...data,
-        collections: data.collections.filter((item) => item.id !== confirmState.id),
-        cases: data.cases.map((item) =>
-          item.collectionId === confirmState.id ? { ...item, collectionId: undefined, updatedAt: nowIso() } : item
-        )
-      };
-      persist(nextData);
-      if (activeView === `collection:${confirmState.id}`) setActiveView('all');
-      setToast('已删除图集，作品已回到未分类');
+      moveCollectionToTrash(confirmState.id);
+      setConfirmState(null);
+      return;
     }
     if (confirmState.type === 'trace') {
       const nextData = { traces: traceData.traces.filter((trace) => trace.id !== confirmState.id) };
@@ -1735,6 +1929,24 @@ export default function App(): JSX.Element {
   const getImageDisplaySrc = (image?: PicFlowImage) => imageSrc(image, libraryState.currentLibrary?.path);
   const getReferenceImageDisplaySrc = (image?: PicFlowImage) => imageSrc(image, libraryState.currentLibrary?.path);
   const isTraceModule = activeView === 'traces';
+  const activeCollections = data.collections.filter((collection) => !collection.deletedAt);
+  const trashedCollections = data.collections.filter((collection) => collection.deletedAt);
+  const collectionRows = useMemo(() => {
+    const rows: Array<{ collection: PicFlowCollection; depth: number; hasChildren: boolean; expanded: boolean }> = [];
+    const visit = (parentId: string | null, depth: number) => {
+      activeCollections
+        .filter((collection) => (collection.parentId ?? null) === parentId)
+        .forEach((collection) => {
+          const hasChildren = activeCollections.some((item) => (item.parentId ?? null) === collection.id);
+          const expanded = expandedCollectionIds.includes(collection.id);
+          rows.push({ collection, depth, hasChildren, expanded });
+          if (hasChildren && expanded) visit(collection.id, depth + 1);
+        });
+    };
+    visit(null, 0);
+    return rows;
+  }, [activeCollections, expandedCollectionIds]);
+  const trashCount = data.cases.filter((item) => item.deletedAt).length + data.collections.filter((item) => item.deletedAt).length;
   const currentViewTitle = isTraceModule ? '创作复迹' : search.trim() ? '\u641c\u7d22\u7ed3\u679c' : viewTitle(activeView, data.collections);
 
   return (
@@ -1776,14 +1988,16 @@ export default function App(): JSX.Element {
             <SidebarSectionHeader title="灵感图集" onAction={addCollection} />
             <div className="mt-2 space-y-1">
               <SidebarRow active={activeView === 'favorites'} icon={<Heart />} label="我的收藏" count={counts.favorites} onClick={() => setActiveView('favorites')} />
-              {data.collections.map((collection) => {
-                const collectionCount = data.cases.filter((item) => item.collectionId === collection.id).length;
+              {collectionRows.map(({ collection, depth, hasChildren, expanded }) => {
+                const collectionCount = data.cases.filter((item) => !item.deletedAt && item.collectionId === collection.id).length;
                 return (
                 <div
                   key={collection.id}
-                  className="group relative"
+                  className="sidebar-collection-row group relative"
+                  style={{ paddingLeft: depth * 14 }}
                   onDragOver={handleCollectionDragOver}
                   onDrop={(event) => handleCollectionDrop(event, collection)}
+                  onContextMenu={(event) => openCollectionMenu(event, collection)}
                 >
                   {editingCollectionId === collection.id ? (
                     <input
@@ -1798,19 +2012,35 @@ export default function App(): JSX.Element {
                       }}
                     />
                   ) : (
-                    <SidebarRow
-                      active={activeView === `collection:${collection.id}`}
-                      icon={<Folder />}
-                      label={collection.name}
-                      count={collectionCount}
-                      onClick={() => setActiveView(`collection:${collection.id}`)}
-                      onDoubleClick={() => startRenameCollection(collection)}
-                      title="双击重命名"
-                    />
+                    <div className="relative">
+                      {hasChildren && (
+                        <button
+                          type="button"
+                          className="absolute left-0 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md bg-transparent text-stone-400 transition hover:text-stone-600 dark:text-neutral-500 dark:hover:text-neutral-200"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleCollectionExpanded(collection.id);
+                          }}
+                          aria-label={expanded ? '收起子文件夹' : '展开子文件夹'}
+                          title={expanded ? '收起子文件夹' : '展开子文件夹'}
+                        >
+                          <ChevronRight className={`h-3.5 w-3.5 transition ${expanded ? 'rotate-90' : ''}`} />
+                        </button>
+                      )}
+                      <SidebarRow
+                        active={activeView === `collection:${collection.id}`}
+                        icon={<Folder />}
+                        label={collection.name}
+                        count={collectionCount}
+                        onClick={() => setActiveView(`collection:${collection.id}`)}
+                        onDoubleClick={() => startRenameCollection(collection)}
+                        title="双击重命名"
+                      />
+                    </div>
                   )}
                   <button
                     className="sidebar-row-action"
-                    onClick={() => requestConfirm({ type: 'collection', id: collection.id, name: collection.name })}
+                    onClick={() => requestConfirm({ type: 'collection', id: collection.id, name: collection.name, hasContents: collectionHasChildrenOrWorks(collection.id) })}
                     aria-label={`删除图集 ${collection.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1824,6 +2054,7 @@ export default function App(): JSX.Element {
           <div className="mt-6 border-t border-[#dde2dc] pt-5 dark:border-[#3b3b3b]">
             <nav className="space-y-1.5">
               <SidebarRow active={activeView === 'traces'} icon={<GitBranch />} label="创作复迹" count={traceData.traces.length} onClick={openTraceModule} />
+              <SidebarRow active={activeView === 'trash'} icon={<Trash2 />} label="回收站" count={trashCount} onClick={() => setActiveView('trash')} />
             </nav>
           </div>
           </div>
@@ -1843,6 +2074,7 @@ export default function App(): JSX.Element {
               onPasteImageNode={pasteImageNodeInSelectedTrace}
               onCreateWorkNode={createWorkNodeInSelectedTrace}
               onUpdateTextNode={updateTextNodeInSelectedTrace}
+              onToggleTextNodeCollapsed={toggleTextNodeCollapsedInSelectedTrace}
               onMoveNode={moveNodeInSelectedTrace}
               onMoveNodes={moveNodesInSelectedTrace}
               onResizeNode={resizeTraceNodeInSelectedTrace}
@@ -1910,7 +2142,30 @@ export default function App(): JSX.Element {
             </div>
           )}
 
-          {visibleCases.length === 0 ? (
+          {activeView === 'trash' && trashedCollections.length > 0 && (
+            <div className="mb-4 rounded-[14px] border border-[#d8ddd7] bg-[#fbfbfa]/70 p-3 dark:border-[#444] dark:bg-[#303030]/70">
+              <div className="mb-2 text-xs font-semibold text-stone-600 dark:text-neutral-400">已删除文件夹</div>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                {trashedCollections.map((collection) => (
+                  <div key={collection.id} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[#dde2dc] bg-white px-3 py-2 dark:border-[#494949] dark:bg-[#353535]">
+                    <Folder className="h-4 w-4 shrink-0 text-stone-400 dark:text-neutral-500" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-stone-700 dark:text-neutral-100">{collection.name}</div>
+                      <div className="text-[11px] text-stone-400 dark:text-neutral-500">删除于 {formatTime(collection.deletedAt ?? undefined)}</div>
+                    </div>
+                    <button className="icon-button h-8 w-8" onClick={() => restoreCollection(collection.id)} aria-label="恢复文件夹" title="恢复文件夹">
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                    <button className="icon-button h-8 w-8 text-[#a24f43] dark:text-[#d9a19a]" onClick={() => requestConfirm({ type: 'permanent-collection', id: collection.id, name: collection.name })} aria-label="永久删除文件夹" title="永久删除文件夹">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {visibleCases.length === 0 && !(activeView === 'trash' && trashedCollections.length > 0) ? (
             <EmptyState
               dragging={galleryDragging}
               onImport={() => importImages()}
@@ -1945,6 +2200,8 @@ export default function App(): JSX.Element {
                   onCopy={() => copyImage(coverImage(item))}
                   onFavorite={() => toggleFavorite(item.id)}
                   onDelete={() => requestConfirm({ type: 'case', id: item.id, title: displayTitle(item) })}
+                  onRestore={() => restoreCase(item.id)}
+                  onPermanentDelete={() => requestConfirm({ type: 'permanent-case', id: item.id, title: displayTitle(item) })}
                   onDragStart={(event) => handleWorkCardDragStart(event, item.id)}
                   cardHeight={cardHeight}
                   getImageSrc={getImageDisplaySrc}
@@ -2030,6 +2287,40 @@ export default function App(): JSX.Element {
         </div>
       )}
 
+      {collectionMenu && (
+        <div
+          className="collection-context-menu"
+          data-collection-menu="true"
+          style={{ left: collectionMenu.x, top: collectionMenu.y }}
+        >
+          <button type="button" onClick={() => addCollection(collectionMenu.id)}>
+            新建子文件夹
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const collection = data.collections.find((item) => item.id === collectionMenu.id);
+              if (collection) startRenameCollection(collection);
+              setCollectionMenu(null);
+            }}
+          >
+            重命名
+          </button>
+          <button
+            type="button"
+            className="is-danger"
+            onClick={() => {
+              const collection = data.collections.find((item) => item.id === collectionMenu.id);
+              if (!collection) return;
+              setCollectionMenu(null);
+              requestConfirm({ type: 'collection', id: collection.id, name: collection.name, hasContents: collectionHasChildrenOrWorks(collection.id) });
+            }}
+          >
+            删除
+          </button>
+        </div>
+      )}
+
       {!libraryState.ready && loaded && (
         <LibraryGateDialog
           missing={libraryState.missing}
@@ -2050,6 +2341,7 @@ export default function App(): JSX.Element {
           onSkip={skipPostImportInfo}
           onSave={(payload) => savePostImportInfo(postImportCase.id, payload)}
           onAddGuideImages={() => addGuideImagesToImportedCase(postImportCase.id)}
+          onGuideDrop={(event) => handleGuideDrop(event, postImportCase.id)}
           onGuidePaste={(event) => handleGuidePaste(event, postImportCase.id)}
           onRemoveGuideImage={removeGuideImage}
         />
@@ -2065,6 +2357,7 @@ export default function App(): JSX.Element {
           onSkip={skipClipboardImportDraft}
           onSave={saveClipboardImportDraft}
           onAddGuideImages={addGuideImagesToClipboardDraft}
+          onGuideDrop={handleClipboardDraftGuideDrop}
           onGuidePaste={handleClipboardDraftGuidePaste}
           onRemoveGuideImage={removeClipboardDraftGuideImage}
         />
@@ -2256,6 +2549,8 @@ function CaseCard({
   onCopy,
   onFavorite,
   onDelete,
+  onRestore,
+  onPermanentDelete,
   onDragStart,
   cardHeight,
   getImageSrc
@@ -2266,6 +2561,8 @@ function CaseCard({
   onCopy: () => void;
   onFavorite: () => void;
   onDelete: () => void;
+  onRestore?: () => void;
+  onPermanentDelete?: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   cardHeight: number;
   getImageSrc: (image?: PicFlowImage) => string;
@@ -2277,8 +2574,14 @@ function CaseCard({
         selected ? 'border-[#8faf9b] ring-2 ring-[#8faf9b]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d8ddd7] dark:border-[#444]'
       } ${selected ? 'is-selected' : ''}`}
       style={{ height: cardHeight }}
-      draggable
-      onDragStart={onDragStart}
+      draggable={!item.deletedAt}
+      onDragStart={(event) => {
+        if (item.deletedAt) {
+          event.preventDefault();
+          return;
+        }
+        onDragStart(event);
+      }}
     >
       <button className="block h-full w-full text-left" onClick={onSelect}>
         <div className="relative h-full bg-[#eef0ed] dark:bg-[#383838]">
@@ -2291,19 +2594,37 @@ function CaseCard({
           )}
         </div>
       </button>
+      {item.deletedAt && (
+        <div className="absolute left-2 right-2 top-2 z-10 rounded-[8px] bg-stone-950/56 px-2 py-1 text-[11px] text-white backdrop-blur">
+          删除于 {formatTime(item.deletedAt)}
+        </div>
+      )}
       <div className="card-actions">
+        {item.deletedAt ? (
+          <>
+            <IconButton label={'恢复'} onClick={onRestore ?? (() => undefined)}>
+              <RotateCcw className="h-4 w-4" />
+            </IconButton>
+            <IconButton label={'永久删除'} subtleDanger onClick={onPermanentDelete ?? (() => undefined)}>
+              <Trash2 className="h-4 w-4" />
+            </IconButton>
+          </>
+        ) : (
+          <>
         <IconButton active={item.favorite} label={'\u6536\u85cf'} onClick={onFavorite}>
           <Heart className="h-4 w-4" fill={item.favorite ? 'currentColor' : 'none'} />
         </IconButton>
         <IconButton label={'\u590d\u5236\u56fe\u7247'} onClick={onCopy}>
           <Copy className="h-4 w-4" />
         </IconButton>
+          </>
+        )}
       </div>
-      <div className="card-delete-action">
+      {!item.deletedAt && <div className="card-delete-action">
         <IconButton label={'\u5220\u9664\u4f5c\u54c1'} subtleDanger onClick={onDelete}>
           <Trash2 className="h-4 w-4" />
         </IconButton>
-      </div>
+      </div>}
     </article>
   );
 }
@@ -2772,11 +3093,14 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
   }
 
   const isCollection = state.type === 'collection';
+  const isPermanentDelete = state.type === 'permanent-case' || state.type === 'permanent-collection';
   const isClearGuides = state.type === 'clear-guides';
   const isReplaceMain = state.type === 'replace-main';
   const isResetTestData = state.type === 'reset-test-data';
   const title = isResetTestData
     ? '确认重置测试数据？'
+    : isPermanentDelete
+      ? '确认永久删除？'
     : isReplaceMain
       ? '确认替换主图？'
       : isClearGuides
@@ -2786,14 +3110,18 @@ function ConfirmDialog({ state, onCancel, onConfirm }: { state: NonNullable<Conf
           : '确认删除作品？';
   const description = isResetTestData
     ? '这会清空当前 TraceNest 的本地测试数据，并让应用下次启动时重新进入资源库初始化流程。此操作仅用于开发测试。'
+    : isPermanentDelete
+      ? '该操作会从本地数据中真正移除，无法从回收站恢复。'
     : isReplaceMain
       ? '当前作品已有主图。确认后将使用拖入的图片作为新的主图。'
       : isClearGuides
         ? '将移除当前作品的全部垫图，此操作无法撤销。'
         : isCollection
-          ? '只会删除图集本身，不会删除其中的作品。图集内作品将回到未分类。'
-          : '删除后该作品将从本地作品库中移除，此操作无法撤销。';
-  const actionLabel = isReplaceMain ? '替换' : isResetTestData ? '重置' : isClearGuides ? '清空' : '删除';
+          ? state.hasContents
+            ? '该文件夹包含子文件夹或作品，删除后可在回收站恢复。'
+            : '该文件夹会移入回收站，之后可在回收站恢复。'
+          : '删除后该作品会移入回收站，可在 30 天内恢复。';
+  const actionLabel = isReplaceMain ? '替换' : isResetTestData ? '重置' : isClearGuides ? '清空' : isPermanentDelete ? '永久删除' : '删除';
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]">

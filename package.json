@@ -1,6 +1,6 @@
 {
   "name": "tracenest",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "productName": "TraceNest",
   "description": "图迹 TraceNest - local AIGC visual case library",
   "main": "out/main/index.js",
@@ -9,24 +9,47 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",
-    "start": "electron-vite preview"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "electron-vite": "^3.0.0",
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "start": "electron-vite preview",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:win:mentor-preview": "cross-env VITE_TRACENEST_BUILD_CHANNEL=mentor-preview npm run build && electron-builder --win"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
     "electron": "^33.2.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^3.0.0",
+    "lucide-react": "^0.468.0",
     "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
+  },
+  "build": {
+    "appId": "com.omgdesignlab.tracenest",
+    "productName": "TraceNest",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

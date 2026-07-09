@@ -57,11 +57,16 @@ type PicFlowCase = {
   promptCn?: string;
   promptEn?: string;
   note?: string;
+  deletedAt?: string | null;
+  deletedFromCollectionId?: string | null;
 };
 
 type PicFlowCollection = {
   id: string;
   name: string;
+  parentId?: string | null;
+  deletedAt?: string | null;
+  deletedParentId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -94,6 +99,7 @@ type PicFlowTextTraceNode = PicFlowBaseTraceNode & {
   type: 'text';
   height?: number;
   text: string;
+  collapsed?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -320,8 +326,22 @@ function libraryNameFromPath(root: string, fallback = 'PicFlow Library'): string
 function normalizeData(data: Partial<PicFlowData>): PicFlowData {
   return {
     version: 1,
-    cases: Array.isArray(data.cases) ? data.cases : [],
-    collections: Array.isArray(data.collections) ? data.collections : [],
+    cases: Array.isArray(data.cases)
+      ? data.cases.map((item) => ({
+          ...item,
+          referenceImages: item.referenceImages ?? [],
+          deletedAt: item.deletedAt ?? null,
+          deletedFromCollectionId: item.deletedFromCollectionId ?? null
+        }))
+      : [],
+    collections: Array.isArray(data.collections)
+      ? data.collections.map((item) => ({
+          ...item,
+          parentId: item.parentId ?? null,
+          deletedAt: item.deletedAt ?? null,
+          deletedParentId: item.deletedParentId ?? null
+        }))
+      : [],
     settings: { ...defaultSettings(), ...data.settings }
   };
 }
@@ -331,7 +351,9 @@ function normalizeTraceData(data: Partial<PicFlowTraceData>): PicFlowTraceData {
     traces: Array.isArray(data.traces)
       ? data.traces.map((trace) => ({
           ...trace,
-          nodes: Array.isArray(trace.nodes) ? trace.nodes : [],
+          nodes: Array.isArray(trace.nodes)
+            ? trace.nodes.map((node) => (node.type === 'text' ? { ...node, collapsed: node.collapsed ?? false } : node))
+            : [],
           edges: Array.isArray(trace.edges) ? trace.edges : []
         }))
       : []
@@ -468,8 +490,8 @@ function readDataFromLibrary(libraryPath: string): PicFlowData {
   ensureLibraryStructure(libraryPath, libraryNameFromPath(libraryPath));
   return normalizeLibraryDataForRead(libraryPath, {
     version: 1,
-    cases: readJson<PicFlowCase[]>(worksPath(libraryPath), []),
-    collections: readJson<PicFlowCollection[]>(collectionsPath(libraryPath), []),
+    cases: normalizeData({ cases: readJson<PicFlowCase[]>(worksPath(libraryPath), []) }).cases,
+    collections: normalizeData({ collections: readJson<PicFlowCollection[]>(collectionsPath(libraryPath), []) }).collections,
     settings: { ...defaultSettings(), ...readJson<PicFlowData['settings']>(settingsPath(libraryPath), defaultSettings()) }
   });
 }
@@ -518,8 +540,8 @@ function loadCurrentLibraryData(): PicFlowLibraryLoadResult {
 function writeData(data: PicFlowData): PicFlowData {
   const normalized: PicFlowData = {
     version: 1,
-    cases: Array.isArray(data.cases) ? data.cases : [],
-    collections: Array.isArray(data.collections) ? data.collections : [],
+    cases: normalizeData({ cases: data.cases }).cases,
+    collections: normalizeData({ collections: data.collections }).collections,
     settings: { ...defaultSettings(), ...data.settings }
   };
   const libraryPath = getCurrentLibraryPath();

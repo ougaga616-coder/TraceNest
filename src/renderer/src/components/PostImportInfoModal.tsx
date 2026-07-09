@@ -1,4 +1,4 @@
-import { ClipboardEvent as ReactClipboardEvent, useEffect, useState } from 'react';
+import { ClipboardEvent as ReactClipboardEvent, DragEvent as ReactDragEvent, useEffect, useState } from 'react';
 import { Check, ImagePlus, Plus, X } from 'lucide-react';
 import type { PicFlowCase, PicFlowCollection, PicFlowImage } from '../types';
 
@@ -17,6 +17,7 @@ type PostImportInfoModalProps = {
   onSkip: () => void;
   onSave: (payload: PostImportInfoPayload) => void | Promise<void>;
   onAddGuideImages: () => void | Promise<void>;
+  onGuideDrop: (event: ReactDragEvent<HTMLElement>) => void | Promise<void>;
   onGuidePaste: (event: ReactClipboardEvent<HTMLElement>) => void | Promise<void>;
   onRemoveGuideImage: (caseId: string, imageId: string) => void;
 };
@@ -35,6 +36,7 @@ export function PostImportInfoModal({
   onSkip,
   onSave,
   onAddGuideImages,
+  onGuideDrop,
   onGuidePaste,
   onRemoveGuideImage
 }: PostImportInfoModalProps): JSX.Element {
@@ -129,11 +131,27 @@ export function PostImportInfoModal({
               </button>
             </div>
             {(item.referenceImages ?? []).length === 0 ? (
-              <div className="flex h-14 items-center justify-center rounded-[12px] border border-dashed border-[#d7ddd6] bg-[#eef1ec]/45 px-3 text-center text-xs text-stone-400 dark:border-[#494949] dark:bg-[#383838]/45 dark:text-neutral-500">
-                {'\u70b9\u51fb\u6dfb\u52a0\u57ab\u56fe\uff0c\u6216\u5728\u5f39\u7a97\u4e2d Ctrl + V \u7c98\u8d34\u4e3a\u57ab\u56fe'}
-              </div>
+              <button
+                type="button"
+                className="flex h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7ddd6] bg-[#eef1ec]/45 px-3 text-center text-xs text-stone-400 transition hover:border-[#bfc9bd] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#383838]/45 dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
+                onClick={() => void onAddGuideImages()}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDrop={(event) => void onGuideDrop(event)}
+              >
+                {'拖拽图片到这里，或复制图片后粘贴添加'}
+              </button>
             ) : (
-              <div className="flex flex-wrap gap-2">
+              <div
+                className="flex flex-wrap gap-2 rounded-[12px] border border-transparent"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDrop={(event) => void onGuideDrop(event)}
+              >
                 {(item.referenceImages ?? []).map((image) => (
                   <div key={image.id} className="group relative h-24 w-24 overflow-hidden rounded-[12px] border border-[#d8ddd7] bg-white dark:border-[#494949] dark:bg-[#383838]">
                     <img className="h-full w-full object-cover" src={getImageSrc(image)} alt={image.name ?? 'guide'} />

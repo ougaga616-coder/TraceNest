@@ -18,6 +18,7 @@ export type TextTraceNode = BaseTraceNode & {
   type: 'text';
   height?: number;
   text: string;
+  collapsed?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -84,6 +85,7 @@ export function createTextNode(x: number, y: number, text = '', width = 240): Te
     y,
     width,
     text,
+    collapsed: false,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -163,6 +165,19 @@ export function updateTraceTextNode(trace: CreativeTrace, nodeId: string, text: 
     nodes: trace.nodes.map((node) =>
       node.id === nodeId && node.type === 'text'
         ? { ...node, text, updatedAt: timestamp }
+        : node
+    )
+  };
+}
+
+export function toggleTraceTextNodeCollapsed(trace: CreativeTrace, nodeId: string): CreativeTrace {
+  const timestamp = new Date().toISOString();
+  return {
+    ...trace,
+    updatedAt: timestamp,
+    nodes: trace.nodes.map((node) =>
+      node.id === nodeId && node.type === 'text'
+        ? { ...node, collapsed: !(node.collapsed ?? false), updatedAt: timestamp }
         : node
     )
   };

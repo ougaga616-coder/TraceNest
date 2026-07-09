@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, ImagePlus, Search, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Download, ImagePlus, Search, X } from 'lucide-react';
 import {
   DragEvent as ReactDragEvent,
   KeyboardEvent,
@@ -28,6 +28,7 @@ type TraceCanvasProps = {
   onPasteImageNode: (file: File, x: number, y: number) => Promise<string | null>;
   onCreateWorkNode: (workId: string, x: number, y: number) => string;
   onUpdateTextNode: (nodeId: string, text: string, options?: { removeIfEmpty?: boolean }) => void;
+  onToggleTextNodeCollapsed: (nodeId: string) => void;
   onMoveNode: (nodeId: string, x: number, y: number) => void;
   onMoveNodes: (positions: Array<{ id: string; x: number; y: number }>) => void;
   onResizeNode: (nodeId: string, width: number, height: number) => void;
@@ -123,6 +124,7 @@ export function TraceCanvas({
   onPasteImageNode,
   onCreateWorkNode,
   onUpdateTextNode,
+  onToggleTextNodeCollapsed,
   onMoveNode,
   onMoveNodes,
   onResizeNode,
@@ -1486,8 +1488,25 @@ export function TraceCanvas({
               ) : (
                 <>
                   {node.type === 'text' ? (
-                    <div className="whitespace-pre-wrap break-words text-stone-800 dark:text-neutral-100">
-                      {node.text || '新节点'}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        className={`trace-text-toggle ${(node.collapsed ?? false) ? 'is-visible' : ''}`}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!canEditTrace()) return;
+                          onToggleTextNodeCollapsed(node.id);
+                        }}
+                        aria-label={(node.collapsed ?? false) ? '展开文本节点' : '收缩文本节点'}
+                        title={(node.collapsed ?? false) ? '展开' : '收缩'}
+                      >
+                        <ChevronDown className={`h-3.5 w-3.5 transition ${(node.collapsed ?? false) ? '' : 'rotate-180'}`} />
+                      </button>
+                      <div className={`trace-text-content whitespace-pre-wrap break-words text-stone-800 dark:text-neutral-100 ${(node.collapsed ?? false) ? 'is-collapsed' : ''}`}>
+                        {node.text || '新节点'}
+                      </div>
+                      {(node.collapsed ?? false) && <div className="trace-text-fade">展开</div>}
                     </div>
                   ) : node.type === 'image' ? (
                     <div className="trace-image-frame h-full">
