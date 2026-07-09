@@ -1,6 +1,7 @@
 import { RefObject, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Database, Minus, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Square, Sun, X } from 'lucide-react';
 import type { PicFlowWindowApi } from '../types';
+import { TraceNestLogo } from './TraceNestLogo';
 
 type AppTitlebarProps = {
   currentViewTitle: string;
@@ -36,6 +37,9 @@ export function AppTitlebar({
   return (
     <header className="app-titlebar">
       <div className="titlebar-brand">
+        <span className="titlebar-logo" aria-hidden="true">
+          <TraceNestLogo className="titlebar-logo-image" />
+        </span>
         <span className="titlebar-brand-name">{'\u56fe\u8ff9'}</span>
         <span className="titlebar-separator">/</span>
         <span className="titlebar-current-view">{currentViewTitle}</span>

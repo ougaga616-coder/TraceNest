@@ -79,6 +79,29 @@ select,
   gap: 8px;
 }
 
+.titlebar-logo {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(168, 210, 242, 0.74);
+  border-radius: 9px;
+  background: rgba(247, 252, 255, 0.86);
+  box-shadow: 0 6px 14px rgba(76, 147, 207, 0.1);
+}
+
+.titlebar-logo-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+  user-select: none;
+}
+
 .titlebar-brand-name {
   color: #17201c;
   font-size: 14px;
@@ -105,6 +128,12 @@ select,
 
 .dark .titlebar-brand-name {
   color: #f2f3f0;
+}
+
+.dark .titlebar-logo {
+  border-color: rgba(125, 183, 232, 0.34);
+  background: rgba(58, 58, 58, 0.88);
+  box-shadow: none;
 }
 
 .dark .titlebar-separator {
@@ -793,15 +822,22 @@ select,
   flex: 0 0 44px;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border-radius: 13px;
-  background: linear-gradient(145deg, #4c93cf, #7db7e8);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
+  border: 1px solid rgba(168, 210, 242, 0.72);
+  background: rgba(247, 252, 255, 0.9);
   box-shadow:
-    0 10px 24px rgba(76, 147, 207, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 10px 24px rgba(76, 147, 207, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.brand-logo-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 5px;
+  user-select: none;
 }
 
 .brand-name-block {
@@ -855,11 +891,9 @@ select,
 }
 
 .dark .brand-logo {
-  background: linear-gradient(145deg, #eeeeee, #9a9a9a);
-  color: #202020;
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border-color: rgba(125, 183, 232, 0.36);
+  background: rgba(45, 45, 45, 0.92);
+  box-shadow: none;
 }
 
 .dark .brand-title {

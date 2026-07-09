@@ -24,6 +24,7 @@ import { ClipboardPromptConfirm } from './components/ClipboardPromptConfirm';
 import { PostImportInfoModal, type PostImportInfoPayload } from './components/PostImportInfoModal';
 import { ShareCardModal } from './components/ShareCardModal';
 import { Toast } from './components/Toast';
+import { TraceNestLogo } from './components/TraceNestLogo';
 import { TraceCanvas } from './features/traces/TraceCanvas';
 import { TraceList } from './features/traces/TraceList';
 import { fallbackTraceApi } from './features/traces/traceStorage';
@@ -2387,7 +2388,9 @@ function BrandHeader(): JSX.Element {
   return (
     <div className="brand-header">
       <div className="brand-identity">
-        <div className="brand-logo">TN</div>
+        <div className="brand-logo">
+          <TraceNestLogo className="brand-logo-image" />
+        </div>
         <div className="brand-name-block">
           <div className="brand-title">图迹</div>
           <div className="brand-en">TraceNest</div>
