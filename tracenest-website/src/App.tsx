@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
@@ -28,6 +28,7 @@ import LiquidEther from "./components/LiquidEther";
 
 const TRACENEST_BETA_DOWNLOAD_URL = "";
 const FONTKEEPER_DOWNLOAD_URL = "";
+const HERO_LIQUID_COLORS = ["#A3F2FF", "#79ACFF", "#8E7CFF", "#9C83FF"];
 
 const FEATURE_MEDIA_SOURCES = {
   generationRecord: { poster: detailScreenshot },
@@ -87,13 +88,15 @@ function App() {
 
     if (!sections.length) return;
 
+    let currentSection = "home";
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
 
-        if (visible?.target.id) {
+        if (visible?.target.id && visible.target.id !== currentSection) {
+          currentSection = visible.target.id;
           setActiveSection(visible.target.id);
         }
       },
@@ -108,32 +111,53 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 24);
+    let frame = 0;
+    let lastValue = window.scrollY > 24;
+    if (lastValue) setIsScrolled(true);
+
+    const updateScrolled = () => {
+      frame = 0;
+      const nextValue = window.scrollY > 24;
+      if (nextValue !== lastValue) {
+        lastValue = nextValue;
+        setIsScrolled(nextValue);
+      }
+    };
+
+    const handleScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateScrolled);
+    };
+
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("tracenest-website-theme", themeMode);
   }, [themeMode]);
 
-  const showToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
     const nextToast = { id: Date.now(), message };
     setToast(nextToast);
     window.setTimeout(() => {
       setToast((current) => (current?.id === nextToast.id ? null : current));
     }, 2600);
-  };
+  }, []);
 
-  const onDownload = () => {
+  const onDownload = useCallback(() => {
     if (!TRACENEST_BETA_DOWNLOAD_URL) {
       showToast("Windows 内测版即将提供。");
       return;
     }
 
     showToast("Windows 内测版下载即将开始。");
-  };
+  }, [showToast]);
 
   const onFeedbackSubmit = (formData: FeedbackData) => {
     submitFeedback(formData);
@@ -311,7 +335,7 @@ function Hero({ onDownload }: { onDownload: () => void }) {
   );
 }
 
-function HeroFluidBackground() {
+const HeroFluidBackground = memo(function HeroFluidBackground() {
   const [cursorSize, setCursorSize] = useState(() => getHeroCursorSize());
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -344,7 +368,7 @@ function HeroFluidBackground() {
   return (
     <div className="hero-fluid-background" aria-hidden="true">
       <LiquidEther
-        colors={["#A3F2FF", "#79ACFF", "#8E7CFF", "#9C83FF"]}
+        colors={HERO_LIQUID_COLORS}
         mouseForce={20}
         cursorSize={cursorSize}
         isViscous={false}
@@ -363,7 +387,7 @@ function HeroFluidBackground() {
       />
     </div>
   );
-}
+});
 
 function getHeroCursorSize() {
   if (typeof window === "undefined") {
