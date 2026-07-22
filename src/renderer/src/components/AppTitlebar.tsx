@@ -1,5 +1,5 @@
 import { RefObject, KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Database, Minus, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Square, Sun, X } from 'lucide-react';
+import { FolderOpen, Minus, Moon, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Square, Sun, X } from 'lucide-react';
 import type { PicFlowWindowApi } from '../types';
 import { TraceNestLogo } from './TraceNestLogo';
 
@@ -66,7 +66,7 @@ export function AppTitlebar({
               aria-label={'\u8d44\u6e90\u5e93'}
               title={'\u8d44\u6e90\u5e93'}
             >
-              <Database className="h-4 w-4" />
+              <FolderOpen className="h-4 w-4" strokeWidth={1.75} />
             </button>
           </div>
 

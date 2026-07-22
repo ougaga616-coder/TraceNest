@@ -65,6 +65,7 @@ const minCardScale = 0.78;
 const maxCardScale = 1.45;
 const traceHistoryLimit = 50;
 const emptyLibraryState: PicFlowLibraryState = { ready: false, setupRequired: true, missing: false, recentLibraries: [] };
+const reservedSidebarCollectionNames = new Set(['回收站']);
 const buildChannel = import.meta.env.VITE_TRACENEST_BUILD_CHANNEL;
 const mentorPreviewBuild = buildChannel === 'mentor-preview';
 const mentorPreviewExpiresAt = new Date(2026, 6, 22, 23, 59, 0).getTime();
@@ -1937,6 +1938,7 @@ export default function App(): JSX.Element {
     const visit = (parentId: string | null, depth: number) => {
       activeCollections
         .filter((collection) => (collection.parentId ?? null) === parentId)
+        .filter((collection) => !reservedSidebarCollectionNames.has(collection.name.trim()))
         .forEach((collection) => {
           const hasChildren = activeCollections.some((item) => (item.parentId ?? null) === collection.id);
           const expanded = expandedCollectionIds.includes(collection.id);
@@ -1952,7 +1954,7 @@ export default function App(): JSX.Element {
 
   return (
     <div
-      className="flex h-screen flex-col bg-[#eaf2f8] text-ink dark:bg-[#242424] dark:text-neutral-100"
+      className="flex h-screen flex-col bg-[#edf4f8] text-ink dark:bg-[#242424] dark:text-neutral-100"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => event.preventDefault()}
     >
@@ -1974,20 +1976,22 @@ export default function App(): JSX.Element {
 
       <main
         className="grid min-h-0 flex-1"
-        style={{ gridTemplateColumns: sidePanelsCollapsed ? 'minmax(620px, 1fr)' : isTraceModule ? '260px minmax(620px, 1fr)' : '260px minmax(620px, 1fr) 400px' }}
+        style={{ gridTemplateColumns: sidePanelsCollapsed ? 'minmax(620px, 1fr)' : isTraceModule ? 'var(--app-sidebar-width) minmax(620px, 1fr)' : 'var(--app-sidebar-width) minmax(620px, 1fr) var(--app-detail-panel-width)' }}
       >
         {!sidePanelsCollapsed && (
-        <aside className="flex min-h-0 flex-col bg-[#f4f8fb] dark:bg-[#2b2b2b]">
+        <aside className="flex min-h-0 flex-col bg-[#f5f9fc] dark:bg-[#2b2b2b]">
           <BrandHeader />
-          <div className="px-4 py-5">
-          <nav className="space-y-1.5">
+          <div className="sidebar-navigation">
+          <section className="sidebar-section">
+          <nav className="sidebar-menu-list">
             <SidebarRow active={activeView === 'all'} icon={<MoreHorizontal />} label="全部作品" count={counts.all} onClick={() => setActiveView('all')} />
             <SidebarRow active={activeView === 'pending'} icon={<Inbox />} label={'\u5f85\u6574\u7406'} count={counts.pending} onClick={() => setActiveView('pending')} />
           </nav>
+          </section>
 
-          <div className="sidebar-collection-section mt-6 border-t border-[#d9e7f1] pt-5 dark:border-[#3b3b3b]">
+          <section className="sidebar-section sidebar-collection-section">
             <SidebarSectionHeader title="灵感图集" onAction={addCollection} />
-            <div className="mt-2 space-y-1">
+            <div className="sidebar-menu-list sidebar-collection-list">
               <SidebarRow active={activeView === 'favorites'} icon={<Heart />} label="我的收藏" count={counts.favorites} onClick={() => setActiveView('favorites')} />
               {collectionRows.map(({ collection, depth, hasChildren, expanded }) => {
                 const collectionCount = data.cases.filter((item) => !item.deletedAt && item.collectionId === collection.id).length;
@@ -2050,15 +2054,21 @@ export default function App(): JSX.Element {
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          <div className="mt-6 border-t border-[#d9e7f1] pt-5 dark:border-[#3b3b3b]">
-            <nav className="space-y-1.5">
+          <section className="sidebar-section">
+            <nav className="sidebar-menu-list">
               <SidebarRow active={activeView === 'traces'} icon={<GitBranch />} label="创作复迹" count={traceData.traces.length} onClick={openTraceModule} />
+            </nav>
+          </section>
+
+          <section className="sidebar-section sidebar-section-last">
+            <nav className="sidebar-menu-list">
               <SidebarRow active={activeView === 'trash'} icon={<Trash2 />} label="回收站" count={trashCount} onClick={() => setActiveView('trash')} />
             </nav>
+          </section>
           </div>
-          </div>
+          <div className="sidebar-footer">@ OMG Design Lab</div>
         </aside>
         )}
 
@@ -2106,7 +2116,8 @@ export default function App(): JSX.Element {
           )
         ) : (
         <section
-          className={`min-h-0 overflow-y-auto bg-[#e8f1f8] px-7 py-6 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#d8ecff] dark:bg-[#2d2b33]' : ''}`}
+          className={`min-h-0 overflow-y-auto bg-[#edf4f8] pb-7 pt-5 transition dark:bg-[#252525] ${galleryDragging ? 'bg-[#dcefff] dark:bg-[#2d2b33]' : ''}`}
+          style={{ paddingLeft: 'var(--app-content-gutter)', paddingRight: 'var(--app-content-gutter)' }}
           onWheel={handleGalleryWheel}
           onDragEnter={(event) => {
             if (isWorkCardDrag(event)) return;
@@ -2123,10 +2134,10 @@ export default function App(): JSX.Element {
           }}
           onDrop={handleGalleryDrop}
         >
-          <div className="mb-3 flex h-8 items-center justify-between">
+          <div className="mb-2 flex items-start justify-between">
             <div>
               <h2 className="text-sm font-semibold tracking-[-0.005em] text-stone-700 dark:text-neutral-200">{search.trim() ? '搜索结果' : viewTitle(activeView, data.collections)}</h2>
-              <p className="text-xs text-stone-500 dark:text-neutral-500">
+              <p className="mt-0.5 text-xs text-stone-500 dark:text-neutral-500">
                 {search.trim() ? '搜索作品、Prompt、模型和来源。' : `${visibleCases.length} 个作品`}
               </p>
             </div>
@@ -2214,7 +2225,7 @@ export default function App(): JSX.Element {
         )}
 
         {!sidePanelsCollapsed && !isTraceModule && (
-        <div className="min-h-0 bg-[#e7f0f7] p-4 pl-2 dark:bg-[#282828]">
+        <div className="min-h-0 bg-[#edf4f8] py-4 pr-4 dark:bg-[#282828]">
         <DetailPanel
           item={visibleSelectedCase}
           collections={data.collections}
@@ -2396,8 +2407,6 @@ function BrandHeader(): JSX.Element {
           <div className="brand-en">TraceNest</div>
         </div>
       </div>
-      <div className="brand-description">AIGC 视觉灵感库</div>
-      <div className="brand-studio">by OMG Design Lab</div>
     </div>
   );
 }
@@ -2480,7 +2489,7 @@ function LibraryGateDialog({
 
 function SidebarSectionHeader({ title, onAction }: { title: string; onAction: () => void }): JSX.Element {
   return (
-    <div className="sidebar-section-header mb-2">
+    <div className="sidebar-section-header">
       <span className="sidebar-section-title">{title}</span>
       <button className="sidebar-section-add" onClick={onAction} aria-label="新建图集" title="新建图集">
         <Plus className="h-4 w-4" />
@@ -2573,8 +2582,8 @@ function CaseCard({
   const cover = item.images.find((image) => image.id === item.coverImageId) ?? item.images[0];
   return (
     <article
-      className={`group relative overflow-hidden rounded-[18px] border bg-[#fcfeff] shadow-[0_18px_44px_rgba(31,56,75,0.11)] transition duration-200 hover:-translate-y-0.5 hover:border-[#a8d2f2] hover:shadow-[0_24px_56px_rgba(31,56,75,0.15)] dark:bg-[#303030] ${
-        selected ? 'border-[#a8d2f2] ring-2 ring-[#7db7e8]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d7e6f2] dark:border-[#444]'
+      className={`group relative overflow-hidden rounded-[16px] border bg-white shadow-[0_14px_34px_rgba(31,56,75,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-[#b8d9ef] hover:shadow-[0_18px_42px_rgba(31,56,75,0.11)] dark:bg-[#303030] ${
+        selected ? 'border-[#9ecdea] ring-1 ring-[#6eb4e9]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#dce9f2] dark:border-[#444]'
       } ${selected ? 'is-selected' : ''}`}
       style={{ height: cardHeight }}
       draggable={!item.deletedAt}
@@ -2587,7 +2596,7 @@ function CaseCard({
       }}
     >
       <button className="block h-full w-full text-left" onClick={onSelect}>
-        <div className="relative h-full bg-[#f7fbff] dark:bg-[#383838]">
+        <div className="relative h-full bg-[#f7fbff] p-1.5 dark:bg-[#383838]">
           {cover ? (
             <CardCoverImage src={getImageSrc(cover)} alt={displayTitle(item)} />
           ) : (
@@ -2656,13 +2665,13 @@ function PendingCard({
   const cover = item.images.find((image) => image.id === item.coverImageId) ?? item.images[0];
   return (
     <article
-      className={`group relative overflow-hidden rounded-[18px] border bg-[#fcfeff] shadow-[0_18px_44px_rgba(31,56,75,0.11)] transition duration-200 hover:-translate-y-0.5 hover:border-[#a8d2f2] hover:shadow-[0_24px_56px_rgba(31,56,75,0.15)] dark:bg-[#303030] ${selected ? 'is-selected border-[#a8d2f2] ring-2 ring-[#7db7e8]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#d7e6f2] dark:border-[#444]'}`}
+      className={`group relative overflow-hidden rounded-[16px] border bg-white shadow-[0_14px_34px_rgba(31,56,75,0.08)] transition duration-200 hover:-translate-y-0.5 hover:border-[#b8d9ef] hover:shadow-[0_18px_42px_rgba(31,56,75,0.11)] dark:bg-[#303030] ${selected ? 'is-selected border-[#9ecdea] ring-1 ring-[#6eb4e9]/20 dark:border-white/35 dark:ring-white/10' : 'border-[#dce9f2] dark:border-[#444]'}`}
       style={{ height: cardHeight }}
       draggable
       onDragStart={onDragStart}
     >
       <button className="block h-full w-full text-left" onClick={onSelect}>
-        <div className="relative h-full bg-[#f7fbff] dark:bg-neutral-800">
+        <div className="relative h-full bg-[#f7fbff] p-1.5 dark:bg-neutral-800">
           {cover ? <CardCoverImage src={getImageSrc(cover)} alt={displayTitle(item)} /> : <div className="flex h-full items-center justify-center text-stone-400 dark:text-neutral-500"><ImagePlus className="h-9 w-9" /></div>}
         </div>
       </button>
@@ -2688,7 +2697,7 @@ function CardCoverImage({ src, alt }: { src: string; alt: string }): JSX.Element
   const isLandscape = orientation === 'landscape';
 
   return (
-    <div className={`relative h-full w-full overflow-hidden ${isLandscape ? 'flex items-center justify-center bg-[#f4f9fd] dark:bg-[#343434]' : 'bg-[#f7fbff] dark:bg-[#383838]'}`}>
+    <div className={`relative h-full w-full overflow-hidden rounded-[11px] ${isLandscape ? 'flex items-center justify-center bg-[#f4f9fd] dark:bg-[#343434]' : 'bg-[#f7fbff] dark:bg-[#383838]'}`}>
       <img
         className={isLandscape ? 'h-full w-full object-contain p-2' : 'h-full w-full object-cover object-top'}
         src={src}
@@ -2758,7 +2767,7 @@ function DetailPanel({
 }): JSX.Element {
   if (!item) {
     return (
-    <aside className="flex h-full min-h-0 items-center justify-center rounded-[18px] border border-[#d7e5ef]/80 bg-[#f7fbff] px-8 text-center shadow-[0_18px_50px_rgba(23,32,28,0.06)] dark:border-[#3b3b3b] dark:bg-[#2f2f2f]">
+    <aside className="detail-panel-empty">
         <div>
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[14px] bg-[#eaf4ff] text-[#2f6f9f] dark:bg-[#383838] dark:text-neutral-300">
             <MoreHorizontal className="h-6 w-6" />
@@ -2774,26 +2783,26 @@ function DetailPanel({
   const promptClipboardRequest = clipboardRequest?.workId === item.id ? clipboardRequest : null;
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#d7e5ef]/80 bg-[#f7fbff] shadow-[0_18px_50px_rgba(23,32,28,0.06)] dark:border-[#3b3b3b] dark:bg-[#2f2f2f]">
-      <div className="border-b border-[#d9e7f1] bg-[#fbfbf8]/90 px-5 py-4 backdrop-blur dark:border-[#3b3b3b] dark:bg-[#303030]/95">
+    <aside className="detail-panel">
+      <div className="detail-panel-header">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-stone-500 dark:text-neutral-400">作品信息</p>
-          <p className="mt-1 text-xs text-stone-500 dark:text-neutral-400">{item.status === 'pending' ? '\u5f85\u6574\u7406\u4f5c\u54c1' : '\u5df2\u6574\u7406\u4f5c\u54c1'}</p>
+          <p className="detail-panel-title">作品信息</p>
+          <p className="detail-panel-subtitle">{item.status === 'pending' ? '\u5f85\u6574\u7406\u4f5c\u54c1' : '\u5df2\u6574\u7406\u4f5c\u54c1'}</p>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 pb-8 pt-4">
-        <section className="rounded-[16px] bg-[#eaf4ff] p-3 dark:bg-[#292929]">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold text-stone-600 dark:text-neutral-400">主图</span>
+      <div className="detail-panel-scroll">
+        <section className="detail-image-section">
+          <div className="detail-section-heading">
+            <span>主图</span>
             <div className="flex items-center gap-1">
-              <button className="icon-button" onClick={() => onCopyMainImage(cover)} aria-label="复制主图" title="复制主图">
-                <Copy className="h-4 w-4" />
+              <button className="detail-copy-button" onClick={() => onCopyMainImage(cover)} aria-label="复制主图" title="复制主图">
+                <Copy className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
           <div
-            className="group relative h-[330px] overflow-hidden rounded-[14px] bg-[#e7f1f8] dark:bg-[#343434]"
+            className="group relative h-[244px] overflow-hidden rounded-[10px] bg-[#dfeffc] dark:bg-[#343434]"
             onDragOver={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -2810,7 +2819,7 @@ function DetailPanel({
           </div>
 
           <div
-            className="mt-4 border-t border-[#d9e7f1]/80 pt-3 outline-none dark:border-[#3f3f3f]"
+            className="mt-4 outline-none"
             data-guide-dropzone="true"
             tabIndex={0}
             onDragOver={(event) => {
@@ -2820,8 +2829,8 @@ function DetailPanel({
             onDrop={(event) => onGuideDrop(event, item.id)}
             onPaste={(event) => onGuidePaste(event, item.id)}
           >
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-stone-600 dark:text-neutral-400">垫图</span>
+            <div className="detail-section-heading mb-2">
+              <span>垫图</span>
                 {(item.referenceImages ?? []).length > 0 && (
                   <button className="h-7 rounded-lg px-2 text-xs text-stone-400 transition hover:bg-[#eaf4ff] hover:text-[#9d5147] dark:text-neutral-500 dark:hover:bg-[#383838] dark:hover:text-[#d9a19a]" onClick={() => onClearGuideImages(item)}>
                     清空
@@ -2831,7 +2840,7 @@ function DetailPanel({
             {(item.referenceImages ?? []).length === 0 && (
               <button
                 type="button"
-                className="flex min-h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7e5ef] bg-[#fbfbfa]/35 px-3 text-center text-xs text-stone-400 transition hover:border-[#a8d2f2] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#333333] dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
+                className="detail-guide-empty"
                 onClick={onAddGuideImages}
               >
                 {'\u70b9\u51fb\u3001\u62d6\u62fd\u6216 Ctrl+V \u6dfb\u52a0\u57ab\u56fe'}
@@ -2840,7 +2849,7 @@ function DetailPanel({
             {(item.referenceImages ?? []).length > 0 && (
               <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2.5">
                 {(item.referenceImages ?? []).map((image) => (
-                  <div key={image.id} className="group relative aspect-square min-w-0 overflow-hidden rounded-[12px] border border-[#d7e5ef] bg-white dark:border-[#494949] dark:bg-[#383838]">
+                  <div key={image.id} className="group relative aspect-square min-w-0 overflow-hidden rounded-[12px] border border-[#dce9f2] bg-white dark:border-[#494949] dark:bg-[#383838]">
                     <img className="h-full w-full object-cover" src={getImageSrc(image)} alt={image.name ?? '垫图'} />
                     <div className="absolute inset-x-1 bottom-1 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
                       <button className="icon-button h-7 w-7" onClick={() => onCopyGuideImage(image)} aria-label="复制垫图" title="复制垫图">
@@ -2857,11 +2866,11 @@ function DetailPanel({
           </div>
         </section>
 
-        <section className="rounded-[16px] bg-[#fbfbfa] p-3 dark:bg-[#313131]">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-stone-600 dark:text-neutral-400">Prompt</span>
-            <button className="icon-button" onClick={() => onCopy(item.prompt, 'Prompt')} aria-label={'\u590d\u5236 Prompt'} title={'\u590d\u5236 Prompt'}>
-              <Copy className="h-4 w-4" />
+        <section className="detail-form-section">
+          <div className="detail-section-heading mb-2">
+            <span>Prompt</span>
+            <button className="detail-copy-button" onClick={() => onCopy(item.prompt, 'Prompt')} aria-label={'\u590d\u5236 Prompt'} title={'\u590d\u5236 Prompt'}>
+              <Copy className="h-3.5 w-3.5" />
             </button>
           </div>
           {promptClipboardRequest && (
@@ -2872,18 +2881,19 @@ function DetailPanel({
             />
           )}
           <textarea
-            className="field-input min-h-[230px] resize-y leading-6"
+            className="field-input min-h-[184px] resize-y leading-6"
             value={item.prompt ?? ''}
             onChange={(event) => onUpdate(item.id, { prompt: event.target.value })}
           />
         </section>
 
-        <section className="mt-4 space-y-3 px-1">
+        <section className="detail-form-section detail-meta-section">
+          <div className="detail-fields-section">
           <Field label="模型标签">
             <div className="relative" data-model-combobox="true">
-              <div className="flex h-10 items-center rounded-[10px] border border-[#d7e5ef] bg-[#fbfbfa] focus-within:border-[#a8d2f2] focus-within:ring-2 focus-within:ring-[#7db7e8]/20 dark:border-[#474747] dark:bg-[#343434] dark:focus-within:border-white/35 dark:focus-within:ring-white/10">
+              <div className="detail-select-control">
                 <input
-                  className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-stone-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                  className="detail-select-input"
                   value={modelDraft}
                   onFocus={() => onModelOpenChange(true)}
                   onChange={(event) => {
@@ -2896,8 +2906,8 @@ function DetailPanel({
                   }}
                   placeholder="选择或输入模型标签"
                 />
-                <button className="icon-button mr-1" onClick={() => onModelOpenChange(!modelOpen)} aria-label="展开模型标签" title="展开模型标签">
-                  <ChevronDown className={`h-4 w-4 transition ${modelOpen ? 'rotate-180' : ''}`} />
+                <button className="detail-select-trigger" onClick={() => onModelOpenChange(!modelOpen)} aria-label="展开模型标签" title="展开模型标签">
+                  <ChevronDown className={`detail-select-chevron transition ${modelOpen ? 'rotate-180' : ''}`} strokeWidth={1.5} />
                 </button>
               </div>
               {modelOpen && (
@@ -2932,7 +2942,8 @@ function DetailPanel({
                 </div>
               )}
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
+            {(item.modelTags ?? []).length > 0 && (
+            <div className="detail-model-tags">
               {(item.modelTags ?? []).map((tag) => (
                 <button
                   key={tag}
@@ -2945,29 +2956,34 @@ function DetailPanel({
                 </button>
               ))}
             </div>
+            )}
           </Field>
           <Field label="所属图集">
-            <select className="field-input" value={item.collectionId ?? ''} onChange={(event) => onCollectionChange(item, event.target.value || undefined)}>
-              <option value="">未分类</option>
-              {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-            </select>
+            <div className="detail-native-select-wrap">
+              <select className="detail-native-select" value={item.collectionId ?? ''} onChange={(event) => onCollectionChange(item, event.target.value || undefined)}>
+                <option value="">未分类</option>
+                {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+              </select>
+              <ChevronDown className="detail-select-chevron detail-native-select-icon" strokeWidth={1.5} />
+            </div>
           </Field>
           <Field label="来源链接">
-            <div className="flex gap-2">
-              <input className="field-input" value={item.sourceUrl ?? ''} onChange={(event) => onUpdate(item.id, { sourceUrl: event.target.value })} placeholder="https://" />
-              <button className="icon-button" onClick={() => item.sourceUrl && picflowApi.openExternal(item.sourceUrl)} aria-label="打开来源链接" title="打开来源链接">
-                <Link className="h-4 w-4" />
+            <div className="detail-source-row">
+              <input className="field-input detail-source-input" value={item.sourceUrl ?? ''} onChange={(event) => onUpdate(item.id, { sourceUrl: event.target.value })} placeholder="https://" />
+              <button className="detail-source-icon-button" onClick={() => item.sourceUrl && picflowApi.openExternal(item.sourceUrl)} aria-label="打开来源链接" title="打开来源链接">
+                <Link className="h-3.5 w-3.5" />
               </button>
-              <button className="icon-button" onClick={() => onCopy(item.sourceUrl, '来源链接')} aria-label="复制来源链接" title="复制来源链接">
-                <Copy className="h-4 w-4" />
+              <button className="detail-source-icon-button" onClick={() => onCopy(item.sourceUrl, '来源链接')} aria-label="复制来源链接" title="复制来源链接">
+                <Copy className="h-3.5 w-3.5" />
               </button>
             </div>
           </Field>
-          <div className="text-xs text-stone-500 dark:text-neutral-400">创建时间：{formatTime(item.createdAt)}</div>
+          </div>
+          <div className="detail-created-time">创建时间：{formatTime(item.createdAt)}</div>
         </section>
       </div>
-      <div className="border-t border-[#d9e7f1] bg-[#fbfbf8]/95 p-4 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
-          <div className="mb-2 flex items-center gap-2">
+      <div className="detail-panel-actions">
+        <div className="mb-2 flex items-center gap-2">
           <button className="share-card-primary-button min-w-0 flex-1 justify-center" onClick={() => onOpenShareCard(item)}>
             生成分享卡
           </button>
@@ -2986,10 +3002,10 @@ function DetailPanel({
             </div>
           </div>
         </div>
-          <button className="organize-secondary-button mb-2 w-full" onClick={() => onToggleOrganized(item.id)}>
-            <Check className="h-4 w-4" />
-            {item.status === 'pending' ? '\u6574\u7406\u5b8c\u6210' : '\u6807\u8bb0\u4e3a\u5f85\u6574\u7406'}
-          </button>
+        <button className="organize-secondary-button w-full" onClick={() => onToggleOrganized(item.id)}>
+          <Check className="h-4 w-4" />
+          {item.status === 'pending' ? '\u6574\u7406\u5b8c\u6210' : '\u6807\u8bb0\u4e3a\u5f85\u6574\u7406'}
+        </button>
       </div>
     </aside>
   );
@@ -2997,7 +3013,7 @@ function DetailPanel({
 
 function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
   return (
-    <label className="block">
+    <label className="field-group">
       <span className="field-label dark:text-neutral-400">{label}</span>
       {children}
     </label>
