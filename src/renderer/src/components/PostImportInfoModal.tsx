@@ -1,5 +1,5 @@
 import { ClipboardEvent as ReactClipboardEvent, DragEvent as ReactDragEvent, useEffect, useState } from 'react';
-import { Check, ImagePlus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ImagePlus, X } from 'lucide-react';
 import type { PicFlowCase, PicFlowCollection, PicFlowImage } from '../types';
 
 export type PostImportInfoPayload = {
@@ -88,7 +88,7 @@ export function PostImportInfoModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 backdrop-blur-[2px]"
+      className="post-import-overlay"
       role="dialog"
       aria-modal="true"
       onPaste={(event) => void handlePaste(event)}
@@ -96,25 +96,25 @@ export function PostImportInfoModal({
         if (event.target === event.currentTarget) onSkip();
       }}
     >
-      <div className="flex max-h-[84vh] w-full max-w-[800px] flex-col overflow-hidden rounded-[20px] border border-[#d7e5ef] bg-[#fbfbf8] shadow-[0_28px_80px_rgba(23,32,28,0.22)] dark:border-[#484848] dark:bg-[#303030] dark:text-neutral-100">
-        <div className="flex items-start justify-between gap-4 border-b border-[#d9e7f1] px-5 py-3.5 dark:border-[#3b3b3b]">
-          <div>
-            <h2 className="text-base font-semibold">{'\u8865\u5145\u4f5c\u54c1\u4fe1\u606f'}</h2>
-            <p className="mt-1 text-sm text-stone-500 dark:text-neutral-400">
+      <div className="post-import-modal">
+        <div className="post-import-header">
+          <div className="min-w-0">
+            <h2 className="post-import-title">{'\u8865\u5145\u4f5c\u54c1\u4fe1\u606f'}</h2>
+            <p className="post-import-description">
               {'\u4f60\u53ef\u4ee5\u73b0\u5728\u8865\u5145\u57ab\u56fe\u3001Prompt\u3001\u6a21\u578b\u548c\u56fe\u96c6\uff0c\u4e5f\u53ef\u4ee5\u8df3\u8fc7\u540e\u7a0d\u540e\u6574\u7406\u3002'}
             </p>
           </div>
-          <button className="icon-button" onClick={onSkip} aria-label="关闭" title="关闭">
+          <button className="post-import-close-button" onClick={onSkip} aria-label="关闭" title="关闭">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-5 py-4">
-          <section>
-            <div className="mb-2 text-xs font-semibold text-stone-600 dark:text-neutral-400">{'\u4e3b\u56fe\u9884\u89c8'}</div>
-            <div className="h-[176px] overflow-hidden rounded-[16px] bg-[#eaf4ff] p-2 dark:bg-[#262626]">
+        <div className="post-import-content">
+          <section className="post-import-section">
+            <div className="post-import-label">{'\u4e3b\u56fe\u9884\u89c8'}</div>
+            <div className="post-import-main-preview">
               {coverSrc ? (
-                <img className="h-full w-full rounded-[12px] object-contain" src={coverSrc} alt="imported work" />
+                <img className="post-import-main-image" src={coverSrc} alt="imported work" />
               ) : (
                 <div className="flex h-full items-center justify-center text-stone-400">
                   <ImagePlus className="h-10 w-10" />
@@ -123,17 +123,17 @@ export function PostImportInfoModal({
             </div>
           </section>
 
-          <section>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-stone-600 dark:text-neutral-400">{'\u57ab\u56fe'}</span>
-              <button className="toolbar-icon-button h-8 w-8" onClick={() => void onAddGuideImages()} aria-label="添加垫图" title="添加垫图">
+          <section className="post-import-section">
+            <div className="post-import-section-header">
+              <span className="post-import-label">{'\u57ab\u56fe'}</span>
+              <button className="post-import-add-guide-button" onClick={() => void onAddGuideImages()} aria-label="添加垫图" title="添加垫图">
                 <ImagePlus className="h-3.5 w-3.5" />
               </button>
             </div>
             {(item.referenceImages ?? []).length === 0 ? (
               <button
                 type="button"
-                className="flex h-14 w-full items-center justify-center rounded-[12px] border border-dashed border-[#d7e5ef] bg-[#eaf4ff]/55 px-3 text-center text-xs text-stone-400 transition hover:border-[#a8d2f2] hover:bg-white/55 hover:text-stone-500 dark:border-[#494949] dark:bg-[#383838]/45 dark:text-neutral-500 dark:hover:border-[#5c5c5c] dark:hover:bg-[#3a3a3a] dark:hover:text-neutral-300"
+                className="post-import-guide-empty"
                 onClick={() => void onAddGuideImages()}
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -145,7 +145,7 @@ export function PostImportInfoModal({
               </button>
             ) : (
               <div
-                className="flex flex-wrap gap-2 rounded-[12px] border border-transparent"
+                className="post-import-guide-grid"
                 onDragOver={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -169,19 +169,19 @@ export function PostImportInfoModal({
             )}
           </section>
 
-          <section>
-            <label className="field-label dark:text-neutral-400">Prompt</label>
+          <section className="post-import-field-group">
+            <label className="post-import-label">Prompt</label>
             <textarea
-              className="field-input min-h-[150px] max-h-[180px] resize-y leading-6"
+              className="field-input post-import-prompt-input"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Prompt"
+              placeholder="输入或粘贴 Prompt"
             />
           </section>
 
-          <section>
-            <label className="field-label dark:text-neutral-400">{'\u6a21\u578b\u6807\u7b7e'}</label>
-            <div className="rounded-[12px] border border-[#d7e5ef] bg-[#fbfbfa] p-2 transition focus-within:border-[#a8d2f2] focus-within:ring-2 focus-within:ring-[#7db7e8]/20 dark:border-[#484848] dark:bg-[#343434] dark:focus-within:border-white/35 dark:focus-within:ring-white/10">
+          <section className="post-import-field-group">
+            <label className="post-import-label">{'\u6a21\u578b\u6807\u7b7e'}</label>
+            <div className="post-import-model-control">
               <div className="flex flex-wrap items-center gap-2">
                 {modelTags.map((tag) => (
                   <button
@@ -194,7 +194,7 @@ export function PostImportInfoModal({
                   </button>
                 ))}
                 <input
-                  className="h-8 min-w-[170px] flex-1 rounded-[8px] bg-transparent px-2 text-sm text-ink outline-none placeholder:text-stone-400 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                  className="post-import-model-input"
                   value={modelDraft}
                   onChange={(event) => setModelDraft(event.target.value)}
                   onKeyDown={(event) => {
@@ -213,18 +213,21 @@ export function PostImportInfoModal({
             </div>
           </section>
 
-          <section>
-            <label className="field-label dark:text-neutral-400">{'\u6240\u5c5e\u56fe\u96c6'}</label>
-            <select className="field-input h-10" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
-              <option value="">{'\u672a\u5206\u7c7b'}</option>
-              {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-            </select>
+          <section className="post-import-field-group">
+            <label className="post-import-label">{'\u6240\u5c5e\u56fe\u96c6'}</label>
+            <div className="post-import-select-wrap">
+              <select className="post-import-select" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+                <option value="">{'\u672a\u5206\u7c7b'}</option>
+                {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+              </select>
+              <ChevronDown className="post-import-select-icon" strokeWidth={1.6} />
+            </div>
           </section>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#d9e7f1] bg-[#fbfbf8]/95 px-5 py-3 dark:border-[#3b3b3b] dark:bg-[#303030]/95">
-          <button className="tool-button h-9 px-4" onClick={onSkip}>{'\u8df3\u8fc7'}</button>
-          <button className="primary-button h-9 px-4" onClick={() => void onSave({ prompt, modelTags: modelTagsForSave(), collectionId: collectionId || undefined })}>
+        <div className="post-import-footer">
+          <button className="tool-button post-import-secondary-button" onClick={onSkip}>{'\u8df3\u8fc7'}</button>
+          <button className="primary-button post-import-primary-button" onClick={() => void onSave({ prompt, modelTags: modelTagsForSave(), collectionId: collectionId || undefined })}>
             <Check className="h-4 w-4" />
             {'\u4fdd\u5b58'}
           </button>
